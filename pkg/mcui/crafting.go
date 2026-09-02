@@ -1,6 +1,6 @@
 package mcui
 
-import "racing_game/pkg/voxel"
+import "gocraft/pkg/voxel"
 
 // ItemStack represents a stack of items in an inventory slot
 type ItemStack struct {

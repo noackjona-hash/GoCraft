@@ -3,7 +3,7 @@ package mcmob
 import (
 	"math"
 
-	"racing_game/pkg/voxel"
+	"gocraft/pkg/voxel"
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 

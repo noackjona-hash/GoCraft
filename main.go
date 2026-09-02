@@ -7,11 +7,11 @@ import (
 	"os"
 	"time"
 
-	"racing_game/pkg/mcaudio"
-	"racing_game/pkg/mcmob"
-	"racing_game/pkg/mcplayer"
-	"racing_game/pkg/mcui"
-	"racing_game/pkg/voxel"
+	"gocraft/pkg/mcaudio"
+	"gocraft/pkg/mcmob"
+	"gocraft/pkg/mcplayer"
+	"gocraft/pkg/mcui"
+	"gocraft/pkg/voxel"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
@@ -462,8 +462,35 @@ func main() {
 		}
 
 		if !isMenuOpen {
+			heldBlock := gui.GetActiveBlock()
+			bDef := voxel.BlockRegistry[heldBlock]
+
+			// Hold right click to eat food
+			if bDef.IsFood && rl.IsMouseButtonDown(rl.MouseButtonRight) {
+				if player.EatingTimer == 0 {
+					player.EatingTimer = 1.4 // 1.4 seconds to eat
+				}
+				player.EatingTimer -= dt
+				// Play chew sound periodically
+				if int(player.EatingTimer*10)%3 == 0 {
+					audioEngine.TriggerBlockPlace() // temp chew sound
+				}
+				if player.EatingTimer <= 0 {
+					player.EatingTimer = 0
+					player.Health += float32(bDef.FoodPoints)
+					if player.Health > 20.0 {
+						player.Health = 20.0
+					}
+					if player.Mode == mcplayer.GameModeSurvival {
+						gui.ConsumeActiveItem()
+					}
+				}
+			} else {
+				player.EatingTimer = 0
+			}
+
 			// Right Click: Interact with Crafting Table, Furnace, or Place Block
-			if rl.IsMouseButtonPressed(rl.MouseButtonRight) {
+			if rl.IsMouseButtonPressed(rl.MouseButtonRight) && !bDef.IsFood {
 				player.TriggerSwing()
 				if rayResult.Hit {
 					bx := int(rayResult.BlockPos.X)
@@ -486,20 +513,7 @@ func main() {
 						py := int(rayResult.PlacePos.Y)
 						pz := int(rayResult.PlacePos.Z)
 
-						heldBlock := gui.GetActiveBlock()
-						bDef := voxel.BlockRegistry[heldBlock]
-
-						if bDef.IsFood {
-							// Eat the food instead of placing it
-							player.Health += float32(bDef.FoodPoints)
-							if player.Health > 20.0 {
-								player.Health = 20.0
-							}
-							audioEngine.TriggerBlockPlace() // temporary sound for eating
-							if player.Mode == mcplayer.GameModeSurvival {
-								gui.ConsumeActiveItem()
-							}
-						} else if heldBlock != voxel.BlockAir && !bDef.IsTool && heldBlock != voxel.ItemStick && heldBlock != voxel.ItemCoal && heldBlock != voxel.ItemDiamond && heldBlock != voxel.ItemIronIngot && heldBlock != voxel.ItemGoldIngot {
+						if heldBlock != voxel.BlockAir && !bDef.IsTool && heldBlock != voxel.ItemStick && heldBlock != voxel.ItemCoal && heldBlock != voxel.ItemDiamond && heldBlock != voxel.ItemIronIngot && heldBlock != voxel.ItemGoldIngot {
 							playerBlockX := int(math.Floor(float64(player.Pos.X)))
 							playerBlockY1 := int(math.Floor(float64(player.Pos.Y)))
 							playerBlockY2 := int(math.Floor(float64(player.Pos.Y + 1.0)))

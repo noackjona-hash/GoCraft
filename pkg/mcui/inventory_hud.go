@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"racing_game/pkg/mcplayer"
-	"racing_game/pkg/voxel"
+	"gocraft/pkg/mcplayer"
+	"gocraft/pkg/voxel"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )

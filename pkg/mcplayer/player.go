@@ -3,7 +3,7 @@ package mcplayer
 import (
 	"math"
 
-	"racing_game/pkg/voxel"
+	"gocraft/pkg/voxel"
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
@@ -923,9 +923,10 @@ func (p *MCPlayer) RenderHandAndHeldBlock(heldBlock voxel.BlockType, atlas *voxe
 	}
 
 	bDef := voxel.BlockRegistry[heldBlock]
-	isFlatItem := bDef.IsTool || heldBlock == voxel.ItemStick || heldBlock == voxel.ItemDiamond ||
+	isFlatItem := bDef.IsTool || bDef.IsFood || heldBlock == voxel.ItemStick || heldBlock == voxel.ItemDiamond ||
 		heldBlock == voxel.ItemCoal || heldBlock == voxel.ItemIronIngot || heldBlock == voxel.ItemGoldIngot ||
-		heldBlock == voxel.BlockTorch
+		heldBlock == voxel.BlockTorch || heldBlock == voxel.ItemGunpowder || heldBlock == voxel.ItemBone ||
+		heldBlock == voxel.ItemArrow
 
 	shirtU0, shirtV0, shirtU1, shirtV1 := float32(6)/16.0, float32(2)/16.0, float32(7)/16.0, float32(3)/16.0
 	skinU0, skinV0, skinU1, skinV1 := float32(7)/16.0, float32(2)/16.0, float32(8)/16.0, float32(3)/16.0

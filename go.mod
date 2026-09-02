@@ -1,4 +1,4 @@
-module racing_game
+module gocraft
 
 go 1.27.0
 
