@@ -1,9 +1,0 @@
-{
-  "parent": "minecraft:block/template_bed_foot",
-  "textures": {
-    "east": "minecraft:block/bed/black",
-    "south": "minecraft:block/bed/black",
-    "up": "minecraft:block/bed/black",
-    "west": "minecraft:block/bed/black"
-  }
-}

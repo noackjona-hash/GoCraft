@@ -35,6 +35,8 @@ const (
 	BlockFurnace
 	BlockBookshelf
 	BlockMossyCobblestone
+	BlockWool
+	BlockObsidian
 
 	// Items & Materials
 	ItemStick
@@ -42,6 +44,18 @@ const (
 	ItemIronIngot
 	ItemGoldIngot
 	ItemCoal
+
+	// Food & Mob Drops
+	ItemRawBeef
+	ItemCookedBeef
+	ItemRawPorkchop
+	ItemCookedPorkchop
+	ItemApple
+	ItemBread
+	ItemRottenFlesh
+	ItemGunpowder
+	ItemBone
+	ItemArrow
 
 	// Wooden Tools
 	ItemWoodPickaxe
@@ -79,10 +93,25 @@ type BlockDef struct {
 	IsTransparent    bool
 	IsLightSource    bool
 	Hardness         float32 // Mining time
+	DropItem         BlockType
 	IsTool           bool
 	ToolType         string  // "pickaxe", "axe", "shovel", "sword"
 	MiningEfficiency float32 // Speed multiplier (2.0 to 8.0)
 	AttackDamage     float32
+	IsFood           bool
+	FoodPoints       float32 // Hunger restored (2 to 8)
+	Saturation       float32
+}
+
+// GetBlockDrop returns the item dropped when a block is mined
+func GetBlockDrop(b BlockType) BlockType {
+	if def, exists := BlockRegistry[b]; exists && def.DropItem != BlockAir {
+		return def.DropItem
+	}
+	if b == BlockOakLeaves || b == BlockGlass || b == BlockWater || b == BlockBedrock {
+		return BlockAir
+	}
+	return b
 }
 
 // BlockRegistry holds all registered block & item definitions
@@ -101,6 +130,7 @@ var BlockRegistry = map[BlockType]BlockDef{
 		BottomColor: rl.NewColor(122, 85, 58, 255),
 		IsSolid:     true,
 		Hardness:    0.6,
+		DropItem:    BlockDirt, // Grass drops Dirt!
 	},
 	BlockDirt: {
 		Type:        BlockDirt,
@@ -110,6 +140,7 @@ var BlockRegistry = map[BlockType]BlockDef{
 		BottomColor: rl.NewColor(134, 96, 67, 255),
 		IsSolid:     true,
 		Hardness:    0.5,
+		DropItem:    BlockDirt,
 	},
 	BlockStone: {
 		Type:        BlockStone,
@@ -119,6 +150,7 @@ var BlockRegistry = map[BlockType]BlockDef{
 		BottomColor: rl.NewColor(115, 115, 115, 255),
 		IsSolid:     true,
 		Hardness:    2.5,
+		DropItem:    BlockCobblestone, // Stone drops Cobblestone!
 	},
 	BlockCobblestone: {
 		Type:        BlockCobblestone,
@@ -128,6 +160,7 @@ var BlockRegistry = map[BlockType]BlockDef{
 		BottomColor: rl.NewColor(90, 90, 90, 255),
 		IsSolid:     true,
 		Hardness:    2.0,
+		DropItem:    BlockCobblestone,
 	},
 	BlockMossyCobblestone: {
 		Type:        BlockMossyCobblestone,
@@ -137,6 +170,7 @@ var BlockRegistry = map[BlockType]BlockDef{
 		BottomColor: rl.NewColor(70, 95, 70, 255),
 		IsSolid:     true,
 		Hardness:    2.0,
+		DropItem:    BlockMossyCobblestone,
 	},
 	BlockBedrock: {
 		Type:        BlockBedrock,
@@ -221,6 +255,7 @@ var BlockRegistry = map[BlockType]BlockDef{
 		BottomColor: rl.NewColor(105, 105, 105, 255),
 		IsSolid:     true,
 		Hardness:    2.5,
+		DropItem:    ItemCoal, // Coal Ore drops Coal item!
 	},
 	BlockIronOre: {
 		Type:        BlockIronOre,
@@ -230,6 +265,7 @@ var BlockRegistry = map[BlockType]BlockDef{
 		BottomColor: rl.NewColor(115, 110, 105, 255),
 		IsSolid:     true,
 		Hardness:    3.0,
+		DropItem:    BlockIronOre, // Iron Ore drops raw Iron Ore (smelted in furnace into Iron Ingot)
 	},
 	BlockGoldOre: {
 		Type:        BlockGoldOre,
@@ -239,6 +275,7 @@ var BlockRegistry = map[BlockType]BlockDef{
 		BottomColor: rl.NewColor(120, 115, 105, 255),
 		IsSolid:     true,
 		Hardness:    3.0,
+		DropItem:    BlockGoldOre, // Gold Ore drops raw Gold Ore (smelted in furnace into Gold Ingot)
 	},
 	BlockDiamondOre: {
 		Type:        BlockDiamondOre,
@@ -248,6 +285,7 @@ var BlockRegistry = map[BlockType]BlockDef{
 		BottomColor: rl.NewColor(110, 120, 125, 255),
 		IsSolid:     true,
 		Hardness:    3.5,
+		DropItem:    ItemDiamond, // Diamond Ore drops sparkling Diamond!
 	},
 	BlockRedstoneOre: {
 		Type:        BlockRedstoneOre,
@@ -536,5 +574,110 @@ var BlockRegistry = map[BlockType]BlockDef{
 		ToolType:         "sword",
 		MiningEfficiency: 3.0,
 		AttackDamage:     7.0,
+	},
+
+	// --- NEW BLOCKS ---
+	BlockWool: {
+		Type:        BlockWool,
+		Name:        "White Wool",
+		TopColor:    rl.NewColor(235, 235, 235, 255),
+		SideColor:   rl.NewColor(225, 225, 225, 255),
+		BottomColor: rl.NewColor(225, 225, 225, 255),
+		IsSolid:     true,
+		Hardness:    0.8,
+	},
+	BlockObsidian: {
+		Type:        BlockObsidian,
+		Name:        "Obsidian",
+		TopColor:    rl.NewColor(20, 15, 30, 255),
+		SideColor:   rl.NewColor(15, 10, 25, 255),
+		BottomColor: rl.NewColor(15, 10, 25, 255),
+		IsSolid:     true,
+		Hardness:    9.0,
+	},
+
+	// --- FOOD ITEMS ---
+	ItemRawBeef: {
+		Type:        ItemRawBeef,
+		Name:        "Raw Beef",
+		TopColor:    rl.NewColor(185, 45, 45, 255),
+		SideColor:   rl.NewColor(160, 35, 35, 255),
+		IsFood:      true,
+		FoodPoints:  3.0,
+		Saturation:  1.8,
+	},
+	ItemCookedBeef: {
+		Type:        ItemCookedBeef,
+		Name:        "Steak",
+		TopColor:    rl.NewColor(115, 60, 40, 255),
+		SideColor:   rl.NewColor(95, 45, 30, 255),
+		IsFood:      true,
+		FoodPoints:  8.0,
+		Saturation:  12.8,
+	},
+	ItemRawPorkchop: {
+		Type:        ItemRawPorkchop,
+		Name:        "Raw Porkchop",
+		TopColor:    rl.NewColor(235, 130, 130, 255),
+		SideColor:   rl.NewColor(215, 110, 110, 255),
+		IsFood:      true,
+		FoodPoints:  3.0,
+		Saturation:  1.8,
+	},
+	ItemCookedPorkchop: {
+		Type:        ItemCookedPorkchop,
+		Name:        "Cooked Porkchop",
+		TopColor:    rl.NewColor(150, 90, 60, 255),
+		SideColor:   rl.NewColor(130, 75, 45, 255),
+		IsFood:      true,
+		FoodPoints:  8.0,
+		Saturation:  12.8,
+	},
+	ItemApple: {
+		Type:        ItemApple,
+		Name:        "Apple",
+		TopColor:    rl.NewColor(220, 30, 30, 255),
+		SideColor:   rl.NewColor(200, 20, 20, 255),
+		IsFood:      true,
+		FoodPoints:  4.0,
+		Saturation:  2.4,
+	},
+	ItemBread: {
+		Type:        ItemBread,
+		Name:        "Bread",
+		TopColor:    rl.NewColor(190, 130, 60, 255),
+		SideColor:   rl.NewColor(170, 110, 45, 255),
+		IsFood:      true,
+		FoodPoints:  5.0,
+		Saturation:  6.0,
+	},
+	ItemRottenFlesh: {
+		Type:        ItemRottenFlesh,
+		Name:        "Rotten Flesh",
+		TopColor:    rl.NewColor(140, 80, 50, 255),
+		SideColor:   rl.NewColor(110, 60, 35, 255),
+		IsFood:      true,
+		FoodPoints:  2.0,
+		Saturation:  0.8,
+	},
+
+	// --- MOB DROPS & ITEMS ---
+	ItemGunpowder: {
+		Type:      ItemGunpowder,
+		Name:      "Gunpowder",
+		TopColor:  rl.NewColor(110, 110, 110, 255),
+		SideColor: rl.NewColor(90, 90, 90, 255),
+	},
+	ItemBone: {
+		Type:      ItemBone,
+		Name:      "Bone",
+		TopColor:  rl.NewColor(230, 230, 220, 255),
+		SideColor: rl.NewColor(210, 210, 200, 255),
+	},
+	ItemArrow: {
+		Type:      ItemArrow,
+		Name:      "Arrow",
+		TopColor:  rl.NewColor(160, 150, 140, 255),
+		SideColor: rl.NewColor(140, 130, 120, 255),
 	},
 }

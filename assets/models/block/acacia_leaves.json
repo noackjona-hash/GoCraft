@@ -1,6 +1,6 @@
 {
-    "parent":"block/leaves_bushy2",
-    "textures": {
-	"1": "block/acacia_leaves/acacia_leaves1"
-    }
+  "parent": "minecraft:block/leaves",
+  "textures": {
+    "all": "minecraft:block/acacia_leaves"
+  }
 }

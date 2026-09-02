@@ -1,7 +1,0 @@
-{
-  "parent": "minecraft:block/template_sign_rot_2",
-  "textures": {
-    "sign": "minecraft:block/signs/crimson",
-    "particle": "minecraft:block/signs/crimson"
-  }
-}

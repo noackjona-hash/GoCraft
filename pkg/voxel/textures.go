@@ -112,6 +112,9 @@ func GenerateTextureAtlas() *TextureAtlas {
 	rl.GenTextureMipmaps(&tex)
 	rl.SetTextureFilter(tex, rl.FilterAnisotropic16x) // High quality 16x Anisotropic Minecraft HD texture filtering
 
+	// Set global atlas pixel width for dynamic UV half-texel inset calculation
+	AtlasPixelWidth = float32(atlasW)
+
 	return &TextureAtlas{
 		Texture:   tex,
 		Image:     baseImg,
@@ -157,54 +160,59 @@ func stitchResourcePack(img *rl.Image, blockDir, itemDir string, tileSize int32)
 	}
 
 	blockMap := map[string][][2]int{
-		"grass_block_top.png":          {{0, 0}},
-		"grass_top.png":                {{0, 0}},
-		"grass_block_side.png":         {{1, 0}},
-		"grass_side.png":               {{1, 0}},
-		"dirt.png":                     {{2, 0}},
-		"stone.png":                    {{3, 0}},
-		"cobblestone.png":              {{4, 0}},
-		"mossy_cobblestone.png":        {{5, 0}},
-		"cobblestone_mossy.png":        {{5, 0}},
-		"bedrock.png":                  {{6, 0}},
-		"sand.png":                     {{7, 0}},
-		"sandstone_top.png":            {{8, 0}},
-		"sandstone.png":                {{9, 0}},
-		"sandstone_normal.png":         {{9, 0}},
-		"sandstone_bottom.png":         {{10, 0}},
-		"oak_log.png":                  {{11, 0}},
-		"log_oak.png":                  {{11, 0}},
-		"oak_log_top.png":              {{12, 0}},
-		"log_oak_top.png":              {{12, 0}},
-		"oak_planks.png":               {{13, 0}},
-		"planks_oak.png":               {{13, 0}},
-		"oak_leaves.png":               {{14, 0}},
-		"oak_leaves1.png":              {{14, 0}},
-		"leaves_oak.png":               {{14, 0}},
-		"glass.png":                    {{15, 0}},
-		"coal_ore.png":                 {{0, 1}},
-		"iron_ore.png":                 {{1, 1}},
-		"gold_ore.png":                 {{2, 1}},
-		"diamond_ore.png":              {{3, 1}},
-		"redstone_ore.png":             {{4, 1}},
-		"emerald_ore.png":              {{5, 1}},
-		"lapis_ore.png":                {{6, 1}},
-		"bricks.png":                   {{7, 1}},
-		"brick.png":                    {{7, 1}},
-		"tnt_side.png":                 {{8, 1}},
-		"tnt_top.png":                  {{9, 1}},
-		"tnt_bottom.png":               {{10, 1}},
-		"crafting_table_top.png":       {{11, 1}},
-		"crafting_table_side.png":      {{12, 1}},
-		"crafting_table_front.png":     {{12, 1}},
-		"furnace_front.png":            {{13, 1}},
-		"furnace_front_off.png":        {{13, 1}},
-		"furnace_side.png":             {{14, 1}},
-		"bookshelf.png":                {{15, 1}},
-		"chiseled_bookshelf_side.png":  {{15, 1}},
-		"torch.png":                    {{0, 2}},
-		"torch_on.png":                 {{0, 2}},
-		"water_still.png":              {{1, 2}},
+		"grass_block_top.png":         {{0, 0}},
+		"grass_top.png":               {{0, 0}},
+		"grass_block_side.png":        {{1, 0}},
+		"grass_side.png":              {{1, 0}},
+		"dirt.png":                    {{2, 0}},
+		"stone.png":                   {{3, 0}},
+		"cobblestone.png":             {{4, 0}},
+		"mossy_cobblestone.png":       {{5, 0}},
+		"cobblestone_mossy.png":       {{5, 0}},
+		"bedrock.png":                 {{6, 0}},
+		"sand.png":                    {{7, 0}},
+		"sandstone_top.png":           {{8, 0}},
+		"sandstone.png":               {{9, 0}},
+		"sandstone_normal.png":        {{9, 0}},
+		"sandstone_bottom.png":        {{10, 0}},
+		"oak_log.png":                 {{11, 0}},
+		"log_oak.png":                 {{11, 0}},
+		"oak_log_top.png":             {{12, 0}},
+		"log_oak_top.png":             {{12, 0}},
+		"oak_planks.png":              {{13, 0}},
+		"planks_oak.png":              {{13, 0}},
+		"oak_leaves.png":              {{14, 0}},
+		"oak_leaves1.png":             {{14, 0}},
+		"leaves_oak.png":              {{14, 0}},
+		"glass.png":                   {{15, 0}},
+		"coal_ore.png":                {{0, 1}},
+		"iron_ore.png":                {{1, 1}},
+		"gold_ore.png":                {{2, 1}},
+		"diamond_ore.png":             {{3, 1}},
+		"redstone_ore.png":            {{4, 1}},
+		"emerald_ore.png":             {{5, 1}},
+		"lapis_ore.png":               {{6, 1}},
+		"bricks.png":                  {{7, 1}},
+		"brick.png":                   {{7, 1}},
+		"tnt_side.png":                {{8, 1}},
+		"tnt_top.png":                 {{9, 1}},
+		"tnt_bottom.png":              {{10, 1}},
+		"crafting_table_top.png":      {{11, 1}},
+		"crafting_table_side.png":     {{12, 1}},
+		"crafting_table_front.png":    {{12, 1}},
+		"furnace_front.png":           {{13, 1}},
+		"furnace_front_off.png":       {{13, 1}},
+		"furnace_side.png":            {{14, 1}},
+		"furnace_top.png":             {{14, 1}},
+		"bookshelf.png":               {{15, 1}},
+		"chiseled_bookshelf_side.png": {{15, 1}},
+		"torch.png":                   {{0, 2}},
+		"torch_on.png":                {{0, 2}},
+		"water_still.png":             {{1, 2}},
+		"water_flow.png":              {{1, 2}},
+		"white_wool.png":              {{5, 4}},
+		"wool.png":                    {{5, 4}},
+		"obsidian.png":                {{6, 4}},
 	}
 
 	itemMap := map[string][][2]int{
@@ -233,6 +241,19 @@ func stitchResourcePack(img *rl.Image, blockDir, itemDir string, tileSize int32)
 		"diamond_axe.png":      {{2, 4}},
 		"diamond_shovel.png":   {{3, 4}},
 		"diamond_sword.png":    {{4, 4}},
+		"beef.png":             {{7, 4}},
+		"raw_beef.png":         {{7, 4}},
+		"cooked_beef.png":      {{8, 4}},
+		"steak.png":            {{8, 4}},
+		"porkchop.png":         {{9, 4}},
+		"raw_porkchop.png":     {{9, 4}},
+		"cooked_porkchop.png":  {{10, 4}},
+		"apple.png":            {{11, 4}},
+		"bread.png":            {{12, 4}},
+		"rotten_flesh.png":     {{13, 4}},
+		"gunpowder.png":        {{14, 4}},
+		"bone.png":             {{15, 4}},
+		"arrow.png":            {{10, 5}},
 	}
 
 	destroyStages := [10]string{
@@ -243,8 +264,11 @@ func stitchResourcePack(img *rl.Image, blockDir, itemDir string, tileSize int32)
 	count := 0
 
 	loadTile := func(filePath string) *rl.Image {
+		if filePath == "" {
+			return nil
+		}
 		if strings.HasSuffix(filePath, "_n.png") || strings.HasSuffix(filePath, "_s.png") ||
-			(strings.Contains(filePath, "cmodels") && strings.Contains(filePath, "torch")) {
+			strings.Contains(filePath, "cmodels") {
 			return nil
 		}
 		if _, err := os.Stat(filePath); err != nil {
@@ -252,6 +276,7 @@ func stitchResourcePack(img *rl.Image, blockDir, itemDir string, tileSize int32)
 		}
 		tile := rl.LoadImage(filePath)
 		if tile.Width <= 0 || tile.Height <= 0 {
+			fmt.Printf("WARNING: Failed to load texture (invalid dimensions): %s\n", filePath)
 			return nil
 		}
 		rl.ImageFormat(tile, rl.UncompressedR8g8b8a8)
@@ -953,5 +978,157 @@ func drawCoalItem(img *rl.Image, col, row int) {
 
 func drawTool(img *rl.Image, col, row int, headCol rl.Color, tType string) {
 	stickCol := rl.NewColor(135, 95, 50, 255)
+	stickDark := rl.NewColor(85, 60, 30, 255)
+	headDark := rl.NewColor(
+		uint8(float32(headCol.R)*0.65),
+		uint8(float32(headCol.G)*0.65),
+		uint8(float32(headCol.B)*0.65),
+		255,
+	)
+	headLight := rl.NewColor(
+		uint8(min(255, int(float32(headCol.R)*1.25))),
+		uint8(min(255, int(float32(headCol.G)*1.25))),
+		uint8(min(255, int(float32(headCol.B)*1.25))),
+		255,
+	)
+
+	// Clear tile to transparent first
 	for y := 0; y < 16; y++ {
 		for x := 0; x < 16; x++ {
+			setPixel(img, col, row, x, y, rl.Blank)
+		}
+	}
+
+	// 1. Diagonal handle from bottom-left (2, 13) to top-right (10, 5)
+	stickCoords := [][2]int{
+		{2, 14}, {3, 14},
+		{2, 13}, {3, 13}, {4, 13},
+		{3, 12}, {4, 12}, {5, 12},
+		{4, 11}, {5, 11}, {6, 11},
+		{5, 10}, {6, 10}, {7, 10},
+		{6, 9}, {7, 9}, {8, 9},
+		{7, 8}, {8, 8}, {9, 8},
+		{8, 7}, {9, 7}, {10, 7},
+		{9, 6}, {10, 6},
+	}
+	for _, sc := range stickCoords {
+		if sc[0] > sc[1] {
+			setPixel(img, col, row, sc[0], sc[1], stickDark)
+		} else {
+			setPixel(img, col, row, sc[0], sc[1], stickCol)
+		}
+	}
+
+	// 2. Draw specific tool head (Authentic Minecraft Diagonal 45-degree layouts)
+	if tType == "pickaxe" {
+		// Top curve
+		topPixels := [][2]int{
+			{6, 2}, {7, 2}, {8, 2}, {9, 2}, {10, 2},
+			{5, 3}, {6, 3}, {7, 3}, {8, 3}, {9, 3}, {10, 3}, {11, 3}, {12, 3},
+			{6, 4}, {10, 4}, {11, 4}, {12, 4}, {13, 4},
+			{10, 5}, {11, 5}, {12, 5}, {13, 5},
+			{9, 6}, {12, 6}, {13, 6},
+			{12, 7}, {13, 7},
+			{12, 8}, {13, 8},
+			{12, 9}, {13, 9},
+			{12, 10}, {13, 10},
+		}
+		for _, p := range topPixels {
+			if p[1] <= 3 || p[0] <= 7 {
+				setPixel(img, col, row, p[0], p[1], headLight)
+			} else if p[0] == 13 || p[1] >= 9 {
+				setPixel(img, col, row, p[0], p[1], headDark)
+			} else {
+				setPixel(img, col, row, p[0], p[1], headCol)
+			}
+		}
+	} else if tType == "axe" {
+		// Axe blade wedge
+		axePixels := [][2]int{
+			{7, 2}, {8, 2}, {9, 2},
+			{6, 3}, {7, 3}, {8, 3}, {9, 3}, {10, 3},
+			{6, 4}, {7, 4}, {8, 4}, {9, 4}, {10, 4}, {11, 4},
+			{7, 5}, {8, 5}, {9, 5}, {10, 5}, {11, 5},
+			{8, 6}, {9, 6}, {10, 6}, {11, 6},
+			{9, 7}, {10, 7}, {11, 7},
+			{10, 8}, {11, 8},
+		}
+		for _, p := range axePixels {
+			if p[1] <= 3 || p[0] <= 7 {
+				setPixel(img, col, row, p[0], p[1], headLight)
+			} else if p[0] >= 11 || p[1] >= 7 {
+				setPixel(img, col, row, p[0], p[1], headDark)
+			} else {
+				setPixel(img, col, row, p[0], p[1], headCol)
+			}
+		}
+	} else if tType == "shovel" {
+		// Shovel spade blade
+		shovelPixels := [][2]int{
+			{11, 2}, {12, 2},
+			{10, 3}, {11, 3}, {12, 3}, {13, 3},
+			{9, 4}, {10, 4}, {11, 4}, {12, 4}, {13, 4},
+			{9, 5}, {10, 5}, {11, 5}, {12, 5},
+			{8, 6}, {9, 6}, {10, 6},
+		}
+		for _, p := range shovelPixels {
+			if p[1] <= 3 {
+				setPixel(img, col, row, p[0], p[1], headLight)
+			} else if p[0] >= 12 || p[1] >= 5 {
+				setPixel(img, col, row, p[0], p[1], headDark)
+			} else {
+				setPixel(img, col, row, p[0], p[1], headCol)
+			}
+		}
+	} else if tType == "sword" {
+		// Clear handle for sword and draw authentic sword
+		for y := 0; y < 16; y++ {
+			for x := 0; x < 16; x++ {
+				setPixel(img, col, row, x, y, rl.Blank)
+			}
+		}
+		// Pommel & Grip
+		setPixel(img, col, row, 2, 14, stickDark)
+		setPixel(img, col, row, 2, 13, stickDark)
+		setPixel(img, col, row, 3, 14, stickDark)
+		setPixel(img, col, row, 3, 13, stickCol)
+		setPixel(img, col, row, 4, 12, stickCol)
+		setPixel(img, col, row, 5, 11, stickCol)
+
+		// Crossguard
+		guardPixels := [][2]int{{3, 11}, {4, 10}, {5, 12}, {6, 11}, {4, 11}, {5, 10}}
+		for _, gp := range guardPixels {
+			setPixel(img, col, row, gp[0], gp[1], headDark)
+		}
+
+		// Blade (Diagonal)
+		bladePixels := [][2]int{
+			{6, 10}, {7, 9}, {8, 8}, {9, 7}, {10, 6}, {11, 5}, {12, 4}, {13, 3},
+			{5, 9}, {6, 8}, {7, 7}, {8, 6}, {9, 5}, {10, 4}, {11, 3}, {12, 2},
+			{7, 10}, {8, 9}, {9, 8}, {10, 7}, {11, 6}, {12, 5}, {13, 4},
+		}
+		for _, bp := range bladePixels {
+			if bp[0] > bp[1] {
+				setPixel(img, col, row, bp[0], bp[1], headLight)
+			} else if bp[0] < bp[1] {
+				setPixel(img, col, row, bp[0], bp[1], headDark)
+			} else {
+				setPixel(img, col, row, bp[0], bp[1], headCol)
+			}
+		}
+	}
+}
+
+func drawDestroyStage(img *rl.Image, stage, row int) {
+	density := (stage + 1) * 7
+	for y := 0; y < 16; y++ {
+		for x := 0; x < 16; x++ {
+			hash := (x*17 + y*31 + (x*y*7)) % 100
+			if hash < density {
+				setPixel(img, stage, row, x, y, rl.NewColor(0, 0, 0, 200))
+			} else {
+				setPixel(img, stage, row, x, y, rl.Blank)
+			}
+		}
+	}
+}

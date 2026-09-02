@@ -1,7 +1,0 @@
-{
-  "parent": "minecraft:block/template_sign_rot_3",
-  "textures": {
-    "sign": "minecraft:block/signs/birch",
-    "particle": "minecraft:block/signs/birch"
-  }
-}

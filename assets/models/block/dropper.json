@@ -1,23 +1,8 @@
 {
-	"credit": "Made with Blockbench",
-	"parent": "minecraft:block/orientable",
-	"textures": {
-		"0": "block/dropper_front",
-		"1": "block/dispenser_side",
-		"particle": "block/dropper_front"
-	},
-	"elements": [
-		{
-			"from": [0, 0, 0],
-			"to": [16, 16, 16],
-			"faces": {
-				"north": {"uv": [0, 0, 16, 16], "texture": "#0"},
-				"east": {"uv": [0, 0, 16, 16], "texture": "#1"},
-				"south": {"uv": [0, 0, 16, 16], "texture": "#1"},
-				"west": {"uv": [0, 0, 16, 16], "texture": "#1"},
-				"up": {"uv": [0, 0, 16, 16], "texture": "#1"},
-				"down": {"uv": [0, 0, 16, 16], "texture": "#1"}
-			}
-		}
-	]
+  "parent": "minecraft:block/orientable",
+  "textures": {
+    "front": "minecraft:block/dropper_front",
+    "side": "minecraft:block/furnace_side",
+    "top": "minecraft:block/furnace_top"
+  }
 }

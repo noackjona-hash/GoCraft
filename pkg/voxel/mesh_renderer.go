@@ -154,10 +154,37 @@ func GetBlockTextureAtlasPos(b BlockType, face FaceType) (int, int) {
 		return 3, 4
 	case ItemDiamondSword:
 		return 4, 4
+	case BlockWool:
+		return 5, 4
+	case BlockObsidian:
+		return 6, 4
+	case ItemRawBeef:
+		return 7, 4
+	case ItemCookedBeef:
+		return 8, 4
+	case ItemRawPorkchop:
+		return 9, 4
+	case ItemCookedPorkchop:
+		return 10, 4
+	case ItemApple:
+		return 11, 4
+	case ItemBread:
+		return 12, 4
+	case ItemRottenFlesh:
+		return 13, 4
+	case ItemGunpowder:
+		return 14, 4
+	case ItemBone:
+		return 15, 4
+	case ItemArrow:
+		return 10, 5
 	default:
 		return 0, 0
 	}
 }
+
+// AtlasPixelWidth is set during atlas generation so UV inset can scale with resolution
+var AtlasPixelWidth float32 = 256.0 // default for 16x16 tiles × 16 cols
 
 // GetBlockTextureUVs returns UV (uMin, vMin, uMax, vMax) in texture atlas for block face
 func GetBlockTextureUVs(b BlockType, face FaceType) (float32, float32, float32, float32) {
@@ -166,8 +193,9 @@ func GetBlockTextureUVs(b BlockType, face FaceType) (float32, float32, float32, 
 	cellW := 1.0 / float32(AtlasCols)
 	cellH := 1.0 / float32(AtlasRows)
 
-	// Half-texel subpixel inset to completely eliminate texture edge bleeding / lines
-	eps := float32(0.0003)
+	// Dynamic half-texel inset: scales correctly with any atlas resolution (16px, 64px, 128px HD, etc.)
+	// This completely eliminates texture edge bleeding / colored lines between blocks
+	eps := 0.5 / AtlasPixelWidth
 
 	uMin := float32(col)*cellW + eps
 	vMin := float32(row)*cellH + eps
@@ -180,7 +208,7 @@ func GetBlockTextureUVs(b BlockType, face FaceType) (float32, float32, float32, 
 // CalculateVertexAO calculates smooth corner ambient occlusion (0 = darkest, 3 = brightest)
 func CalculateVertexAO(side1, side2, corner bool) float32 {
 	if side1 && side2 {
-		return 0.45 // Deepest corner shadow
+		return 0.68 // Soft corner shadow
 	}
 	count := 0
 	if side1 {
@@ -194,11 +222,11 @@ func CalculateVertexAO(side1, side2, corner bool) float32 {
 	}
 	switch count {
 	case 1:
-		return 0.80
+		return 0.90
 	case 2:
-		return 0.62
+		return 0.78
 	case 3:
-		return 0.45
+		return 0.68
 	default:
 		return 1.00 // Full ambient light
 	}

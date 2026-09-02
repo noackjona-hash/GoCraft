@@ -1,8 +1,0 @@
-{
-  "parent": "minecraft:block/template_bed_head",
-  "textures": {
-    "east": "minecraft:block/bed/green",
-    "up": "minecraft:block/bed/green",
-    "west": "minecraft:block/bed/green"
-  }
-}

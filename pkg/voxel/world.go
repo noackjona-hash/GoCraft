@@ -2,6 +2,7 @@ package voxel
 
 import (
 	"math"
+	"math/rand"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
@@ -11,6 +12,13 @@ const (
 	WorldHeight = 48
 	WaterLevel  = 14
 )
+
+// BlockPos represents an integer 3D block coordinate
+type BlockPos struct {
+	X int
+	Y int
+	Z int
+}
 
 // ChunkCoord represents a 2D chunk grid position (can be negative or positive infinite)
 type ChunkCoord struct {
@@ -28,6 +36,7 @@ type ChunkData struct {
 type VoxelWorld struct {
 	Chunks           map[ChunkCoord]*ChunkData
 	ScheduledUpdates []ScheduledUpdate
+	Torches          map[BlockPos]uint8
 }
 
 // NewVoxelWorld initializes the infinite procedural voxel world
@@ -35,6 +44,7 @@ func NewVoxelWorld() *VoxelWorld {
 	return &VoxelWorld{
 		Chunks:           make(map[ChunkCoord]*ChunkData),
 		ScheduledUpdates: make([]ScheduledUpdate, 0),
+		Torches:          make(map[BlockPos]uint8),
 	}
 }
 
@@ -49,7 +59,7 @@ func (w *VoxelWorld) GetChunk(cx, cz int) *ChunkData {
 	return chunk
 }
 
-// generateChunk deterministically generates terrain, ores, sand, water, and trees using continuous world coordinates
+// generateChunk deterministically generates rich biomes, mountains, valleys, 3D caves, balanced ores, and trees
 func (w *VoxelWorld) generateChunk(cx, cz int) *ChunkData {
 	chunk := &ChunkData{
 		Coord: ChunkCoord{X: cx, Z: cz},
@@ -63,103 +73,171 @@ func (w *VoxelWorld) generateChunk(cx, cz int) *ChunkData {
 			wx := float64(startX + lx)
 			wz := float64(startZ + lz)
 
-			// Continuous procedural Perlin-like 2D terrain elevation
-			nx := wx * 0.038
-			nz := wz * 0.038
+			// 1. Biome Factors: Continentalness, Moisture, and Mountain Roughness
+			continental := FractalNoise2D(wx*0.005, wz*0.005, 3, 0.5, 2.0)
+			moisture := FractalNoise2D((wx+600.0)*0.006, (wz+600.0)*0.006, 2, 0.5, 2.0)
+			roughness := FractalNoise2D((wx-400.0)*0.012, (wz-400.0)*0.012, 3, 0.5, 2.0)
+			detail := Perlin2D(wx*0.04, wz*0.04) * 1.8
 
-			elevation := math.Sin(nx)*3.2 + math.Cos(nz)*3.2 +
-				math.Sin(nx*2.2+nz*1.8)*1.6 + math.Cos(nx*0.8-nz*1.4)*2.8
+			isOcean := continental < -0.28
+			isDesert := !isOcean && moisture < -0.22
+			isMountain := !isOcean && continental > 0.15 && roughness > 0.20
 
-			height := int(18.0 + elevation)
+			// 2. Continuous Biome-Driven Elevation
+			var baseH float64
+			if isOcean {
+				// Deep water basin & gradual beach slope
+				baseH = 9.0 + (continental+0.6)*8.0 + detail*0.5
+			} else if isMountain {
+				// Dramatic Mountain Peaks and Ridges
+				peakBoost := (roughness - 0.20) * 26.0
+				if peakBoost < 0 {
+					peakBoost = 0
+				}
+				baseH = 22.0 + peakBoost + detail*2.2
+			} else if isDesert {
+				// Rolling Desert Dunes
+				baseH = 16.0 + continental*4.0 + roughness*3.0 + detail
+			} else {
+				// Plains / Forest Rolling Hills
+				baseH = 17.0 + continental*6.0 + roughness*4.0 + detail
+			}
+
+			height := int(math.Round(baseH))
 			if height < 2 {
 				height = 2
 			}
-			if height >= WorldHeight-6 {
-				height = WorldHeight - 6
+			if height >= WorldHeight-4 {
+				height = WorldHeight - 4
 			}
 
-			// Bedrock at y = 0
+			// 3. Bedrock at y = 0
 			chunk.Blocks[lx][0][lz] = BlockBedrock
 
-			// Underground stone & Ore Veins
-			for y := 1; y < height-3; y++ {
-				// Deterministic pseudo-random hash for ores
-				oreHash := int(math.Abs(math.Sin(wx*12.9898+wz*78.233+float64(y)*37.719) * 43758.5453)) % 1000
+			// 4. Underground Stone, 3D Caves, and Balanced Realistic Ore Distribution
+			for y := 1; y < height; y++ {
+				// 3D Cave carving (natural subterranean tunnels)
+				caveNoise := Perlin3D(wx*0.048, float64(y)*0.08, wz*0.048)
+				if caveNoise > 0.62 && y > 2 && y < height-2 {
+					chunk.Blocks[lx][y][lz] = BlockAir
+					continue
+				}
 
-				if y < 8 && oreHash < 12 {
-					chunk.Blocks[lx][y][lz] = BlockDiamondOre // Diamonds!
-				} else if y < 10 && oreHash < 20 {
-					chunk.Blocks[lx][y][lz] = BlockEmeraldOre // Emeralds!
-				} else if y < 12 && oreHash < 35 {
-					chunk.Blocks[lx][y][lz] = BlockRedstoneOre // Redstone
-				} else if y < 16 && oreHash < 50 {
-					chunk.Blocks[lx][y][lz] = BlockLapisOre // Lapis Lazuli
-				} else if y < 18 && oreHash < 75 {
-					chunk.Blocks[lx][y][lz] = BlockGoldOre // Gold
-				} else if y < 28 && oreHash < 115 {
-					chunk.Blocks[lx][y][lz] = BlockIronOre // Iron
-				} else if oreHash < 175 {
-					chunk.Blocks[lx][y][lz] = BlockCoalOre // Coal
+				// Top layers are handled separately
+				if y >= height-3 {
+					if height <= WaterLevel+1 || isDesert {
+						if y == height-3 && !isDesert {
+							chunk.Blocks[lx][y][lz] = BlockSandstone
+						} else {
+							chunk.Blocks[lx][y][lz] = BlockSand
+						}
+					} else if isMountain && height > 32 {
+						chunk.Blocks[lx][y][lz] = BlockStone
+					} else {
+						chunk.Blocks[lx][y][lz] = BlockDirt
+					}
+					continue
+				}
+
+				// Rebalanced Authentic Ore Generation (Rare Veins)
+				oreHash := int(math.Abs(math.Sin(wx*12.9898+wz*78.233+float64(y)*37.719)*43758.5453)) % 1000
+
+				if y <= 8 && oreHash == 24 {
+					// Diamond Ore: Rare deep layer (~0.1%)
+					chunk.Blocks[lx][y][lz] = BlockDiamondOre
+				} else if isMountain && y >= 12 && y <= 36 && oreHash == 25 {
+					// Emerald Ore: Rare in high mountains (~0.1%)
+					chunk.Blocks[lx][y][lz] = BlockEmeraldOre
+				} else if y <= 10 && oreHash >= 20 && oreHash < 23 {
+					// Redstone Ore: Deep layer (~0.3%)
+					chunk.Blocks[lx][y][lz] = BlockRedstoneOre
+				} else if y >= 4 && y <= 16 && oreHash >= 18 && oreHash < 20 {
+					// Lapis Lazuli Ore: Mid-deep layer (~0.2%)
+					chunk.Blocks[lx][y][lz] = BlockLapisOre
+				} else if y <= 14 && oreHash >= 15 && oreHash < 18 {
+					// Gold Ore: Mid-deep layer (~0.3%)
+					chunk.Blocks[lx][y][lz] = BlockGoldOre
+				} else if y <= 26 && oreHash >= 8 && oreHash < 15 {
+					// Iron Ore: Common underground (~0.7%)
+					chunk.Blocks[lx][y][lz] = BlockIronOre
+				} else if y <= 38 && oreHash < 8 {
+					// Coal Ore: Found throughout mountains & caves (~0.8%)
+					chunk.Blocks[lx][y][lz] = BlockCoalOre
 				} else {
 					chunk.Blocks[lx][y][lz] = BlockStone
 				}
 			}
 
-			// Dirt / Sand layers
-			for y := height - 3; y < height; y++ {
-				if y >= 1 {
-					if height <= WaterLevel+1 {
-						chunk.Blocks[lx][y][lz] = BlockSand
-					} else {
-						chunk.Blocks[lx][y][lz] = BlockDirt
-					}
-				}
-			}
-
-			// Top surface block: Grass or Sand
-			if height <= WaterLevel+1 {
+			// 5. Top Surface Block (Grass, Sand, or Mountain Stone)
+			if height <= WaterLevel+1 || isDesert {
 				chunk.Blocks[lx][height][lz] = BlockSand
+			} else if isMountain && height > 32 {
+				if roughness > 0.45 {
+					chunk.Blocks[lx][height][lz] = BlockCobblestone
+				} else {
+					chunk.Blocks[lx][height][lz] = BlockStone
+				}
 			} else {
 				chunk.Blocks[lx][height][lz] = BlockGrass
 			}
 
-			// Crystal Blue Water Lakes & Oceans
+			// 6. Water Body Filling
 			for y := height + 1; y <= WaterLevel; y++ {
 				chunk.Blocks[lx][y][lz] = BlockWater
 			}
 		}
 	}
 
-	// Deterministic Oak Trees
-	treeHash := int(math.Abs(math.Sin(float64(cx)*19.123+float64(cz)*57.456)*10000)) % 100
-	if treeHash < 75 {
-		tx := 4 + (treeHash % 8)
-		tz := 4 + ((treeHash * 3) % 8)
-		ty := chunk.GetHighestBlock(tx, tz)
+	// 7. Trees generation (Forests, Plains, and Meadows)
+	chunkCenterX := float64(startX + 8)
+	chunkCenterZ := float64(startZ + 8)
+	cMoisture := FractalNoise2D((chunkCenterX+600.0)*0.006, (chunkCenterZ+600.0)*0.006, 2, 0.5, 2.0)
+	cRoughness := FractalNoise2D((chunkCenterX-400.0)*0.012, (chunkCenterZ-400.0)*0.012, 3, 0.5, 2.0)
+	cContinental := FractalNoise2D(chunkCenterX*0.005, chunkCenterZ*0.005, 3, 0.5, 2.0)
 
-		if ty > WaterLevel && chunk.Blocks[tx][ty][tz] == BlockGrass {
-			growTreeInChunk(chunk, tx, ty+1, tz)
+	if cContinental > -0.25 && cMoisture > -0.20 && (cRoughness <= 0.35 || cContinental <= 0.15) {
+		// Tree Count based on forest density
+		numTrees := 1
+		if cMoisture > 0.12 {
+			numTrees = 2 + int(math.Abs(math.Sin(float64(cx*17+cz*31))*3.0)) // 2 to 4 trees in dense forest
+		} else {
+			// Plains: 30% chance for 1 tree
+			treeChance := int(math.Abs(math.Sin(float64(cx*13+cz*47))*1000.0)) % 100
+			if treeChance > 35 {
+				numTrees = 0
+			}
+		}
+
+		for t := 0; t < numTrees; t++ {
+			seed := int(math.Abs(math.Sin(float64(cx*101+cz*73+t*37))*10000.0))
+			tx := 3 + (seed % 10)
+			tz := 3 + ((seed / 10) % 10)
+			ty := chunk.GetHighestBlock(tx, tz)
+
+			if ty > WaterLevel && chunk.Blocks[tx][ty][tz] == BlockGrass {
+				treeHeight := 4 + (seed % 3) // 4 to 6 block tall trees
+				growTreeInChunk(chunk, tx, ty+1, tz, treeHeight)
+			}
 		}
 	}
 
 	return chunk
 }
 
-func growTreeInChunk(chunk *ChunkData, x, y, z int) {
-	trunkHeight := 4
-
-	for h := 0; h < trunkHeight; h++ {
+func growTreeInChunk(chunk *ChunkData, x, y, z, height int) {
+	for h := 0; h < height; h++ {
 		if y+h < WorldHeight {
 			chunk.Blocks[x][y+h][z] = BlockOakLog
 		}
 	}
 
-	topY := y + trunkHeight
+	topY := y + height - 1
 
 	for lx := -2; lx <= 2; lx++ {
 		for lz := -2; lz <= 2; lz++ {
 			for ly := -1; ly <= 2; ly++ {
-				if math.Abs(float64(lx)) == 2 && math.Abs(float64(lz)) == 2 && ly >= 1 {
+				// Corner rounding for natural spherical tree leaf canopies
+				if (math.Abs(float64(lx)) == 2 && math.Abs(float64(lz)) == 2) && (ly >= 1 || math.Abs(float64(lx))+math.Abs(float64(lz)) > 3) {
 					continue
 				}
 				leafX := x + lx
@@ -213,7 +291,102 @@ func (w *VoxelWorld) SetBlock(x, y, z int, b BlockType) {
 	lz := z & 15
 
 	chunk := w.GetChunk(cx, cz)
+	oldB := chunk.Blocks[lx][y][lz]
 	chunk.Blocks[lx][y][lz] = b
+
+	pos := BlockPos{X: x, Y: y, Z: z}
+	if b == BlockTorch {
+		w.Torches[pos] = 14
+	} else if b == BlockFurnace {
+		w.Torches[pos] = 13
+	} else if oldB == BlockTorch || oldB == BlockFurnace {
+		delete(w.Torches, pos)
+	}
+}
+
+// GetHighestOpaqueBlock finds the top solid non-transparent block (ignoring leaves, glass, torches, water)
+func (w *VoxelWorld) GetHighestOpaqueBlock(x, z int) int {
+	for y := WorldHeight - 1; y >= 0; y-- {
+		b := w.GetBlock(x, y, z)
+		if b == BlockAir || b == BlockWater || b == BlockOakLeaves || b == BlockGlass || b == BlockTorch {
+			continue
+		}
+		if BlockRegistry[b].IsSolid {
+			return y
+		}
+	}
+	return 0
+}
+
+// GetLightLevel returns authentic Minecraft SkyLight (0.0..1.0) and TorchLight (0.0..1.0)
+func (w *VoxelWorld) GetLightLevel(x, y, z int) (float32, float32) {
+	if y >= WorldHeight-1 {
+		return 1.0, 0.0
+	}
+
+	topOpaque := w.GetHighestOpaqueBlock(x, z)
+	var skyLight float32 = 1.0
+
+	if y < topOpaque {
+		// Inside solid cave or under solid overhang: calculate soft horizontal ambient sky diffusion
+		depth := topOpaque - y
+		if depth <= 4 {
+			skyLight = 0.70 - float32(depth)*0.08
+		} else if depth <= 10 {
+			skyLight = 0.38 - float32(depth-4)*0.04
+		} else {
+			skyLight = 0.12 // Deep cave darkness
+		}
+
+		// Horizontal diffusion from nearby open sky columns within 3 blocks
+		for ox := -2; ox <= 2; ox++ {
+			for oz := -2; oz <= 2; oz++ {
+				if ox == 0 && oz == 0 {
+					continue
+				}
+				dist := float32(math.Sqrt(float64(ox*ox + oz*oz)))
+				neighborOpaque := w.GetHighestOpaqueBlock(x+ox, z+oz)
+				if y >= neighborOpaque {
+					diffused := 1.0 - dist*0.14
+					if diffused > skyLight {
+						skyLight = diffused
+					}
+				}
+			}
+		}
+	} else {
+		// Above all opaque terrain: check for soft tree leaf shade
+		leafCount := 0
+		for checkY := y + 1; checkY < WorldHeight; checkY++ {
+			if w.GetBlock(x, checkY, z) == BlockOakLeaves {
+				leafCount++
+			}
+		}
+		if leafCount > 0 {
+			// Soft gentle tree shade: 0.85 to 0.94 (never black!)
+			skyLight = 1.0 - float32(leafCount)*0.04
+			if skyLight < 0.82 {
+				skyLight = 0.82
+			}
+		}
+	}
+
+	// 2. Torch / Block Light Level
+	var maxTorchLight float32 = 0.0
+	for pos, strength := range w.Torches {
+		dx := math.Abs(float64(x - pos.X))
+		dy := math.Abs(float64(y - pos.Y))
+		dz := math.Abs(float64(z - pos.Z))
+		manhattan := dx + dy + dz
+		if manhattan <= float64(strength) {
+			tLight := float32(float64(strength)-manhattan) / float32(strength)
+			if tLight > maxTorchLight {
+				maxTorchLight = tLight
+			}
+		}
+	}
+
+	return skyLight, maxTorchLight
 }
 
 // GetHighestBlock at ANY global (x, z) coordinate
@@ -383,5 +556,75 @@ func (w *VoxelWorld) TickScheduledPhysics(dt float32, cm interface{ MarkBlockDir
 		}
 	}
 }
+
+// TickRandomBlocks simulates natural Minecraft random block ticks around the player (Grass spreading & growth, grass decay)
+func (w *VoxelWorld) TickRandomBlocks(playerPos rl.Vector3, cm interface{ MarkBlockDirty(x, z int) }) {
+	px := int(math.Floor(float64(playerPos.X)))
+	py := int(math.Floor(float64(playerPos.Y)))
+	pz := int(math.Floor(float64(playerPos.Z)))
+
+	// Check 32 random blocks in active radius around player
+	for i := 0; i < 32; i++ {
+		rx := px + rand.Intn(49) - 24
+		rz := pz + rand.Intn(49) - 24
+		ry := py + rand.Intn(25) - 12
+
+		if ry <= 0 || ry >= WorldHeight-1 {
+			continue
+		}
+
+		b := w.GetBlock(rx, ry, rz)
+
+		// 1. Grass Block Logic
+		if b == BlockGrass {
+			above := w.GetBlock(rx, ry+1, rz)
+			aboveDef := BlockRegistry[above]
+			// If grass is covered by an opaque solid block, it suffocates and turns into Dirt
+			if aboveDef.IsSolid && !aboveDef.IsTransparent {
+				w.SetBlock(rx, ry, rz, BlockDirt)
+				cm.MarkBlockDirty(rx, rz)
+			} else {
+				// Attempt to spread to an adjacent exposed dirt block (dx, dz in [-1, 1], dy in [-2, 2])
+				dx := rand.Intn(3) - 1
+				dz := rand.Intn(3) - 1
+				dy := rand.Intn(5) - 2
+				tx, ty, tz := rx+dx, ry+dy, rz+dz
+				if ty > 0 && ty < WorldHeight-1 {
+					if w.GetBlock(tx, ty, tz) == BlockDirt {
+						tabove := w.GetBlock(tx, ty+1, tz)
+						taboveDef := BlockRegistry[tabove]
+						// Dirt must have sunlight/air or transparent block above
+						if !taboveDef.IsSolid || taboveDef.IsTransparent {
+							w.SetBlock(tx, ty, tz, BlockGrass)
+							cm.MarkBlockDirty(tx, tz)
+						}
+					}
+				}
+			}
+		} else if b == BlockDirt {
+			// 2. Dirt Block Spontaneous Growth if exposed to open sky/air and near grass
+			above := w.GetBlock(rx, ry+1, rz)
+			aboveDef := BlockRegistry[above]
+			if !aboveDef.IsSolid || aboveDef.IsTransparent {
+				// Check 3x3x3 neighbors for grass
+				hasGrassNearby := false
+				for ox := -1; ox <= 1 && !hasGrassNearby; ox++ {
+					for oy := -1; oy <= 1 && !hasGrassNearby; oy++ {
+						for oz := -1; oz <= 1 && !hasGrassNearby; oz++ {
+							if w.GetBlock(rx+ox, ry+oy, rz+oz) == BlockGrass {
+								hasGrassNearby = true
+							}
+						}
+					}
+				}
+				if hasGrassNearby && rand.Float32() < 0.25 {
+					w.SetBlock(rx, ry, rz, BlockGrass)
+					cm.MarkBlockDirty(rx, rz)
+				}
+			}
+		}
+	}
+}
+
 
 
