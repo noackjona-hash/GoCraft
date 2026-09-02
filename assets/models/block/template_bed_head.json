@@ -1,0 +1,199 @@
+{
+	"format_version": "1.21.11",
+	"credit": "Made with Blockbench",
+	"parent": "block/template_bed",
+	"textures": {
+		"north": "block/bed/white",
+		"particle": "block/oak_planks"
+	},
+	"elements": [
+		{
+			"from": [
+				0,
+				3,
+				0
+			],
+			"to": [
+				16,
+				9,
+				16
+			],
+			"faces": {
+				"north": {
+					"uv": [
+						1.5,
+						1.5,
+						5.5,
+						0
+					],
+					"texture": "#north",
+					"cullface": "north"
+				},
+				"east": {
+					"uv": [
+						5.5,
+						1.5,
+						7,
+						5.5
+					],
+					"rotation": 90,
+					"texture": "#east",
+					"cullface": "east"
+				},
+				"west": {
+					"uv": [
+						1.5,
+						5.5,
+						0,
+						1.5
+					],
+					"rotation": 90,
+					"texture": "#west",
+					"cullface": "west"
+				},
+				"up": {
+					"uv": [
+						1.5,
+						1.5,
+						5.5,
+						5.5
+					],
+					"texture": "#up"
+				},
+				"down": {
+					"uv": [
+						7,
+						1.5,
+						11,
+						5.5
+					],
+					"texture": "#north"
+				}
+			}
+		},
+		{
+			"from": [
+				0,
+				0,
+				0
+			],
+			"to": [
+				3,
+				3,
+				3
+			],
+			"faces": {
+				"north": {
+					"uv": [
+						12.5,
+						5.25,
+						13.25195,
+						6
+					],
+					"texture": "#north",
+					"cullface": "north"
+				},
+				"east": {
+					"uv": [
+						14.02344,
+						4.5,
+						14.75,
+						5.25
+					],
+					"texture": "#north"
+				},
+				"south": {
+					"uv": [
+						13.25,
+						5.25,
+						14.02344,
+						6
+					],
+					"texture": "#north"
+				},
+				"west": {
+					"uv": [
+						13.25,
+						4.5,
+						14.02305,
+						5.25
+					],
+					"texture": "#north",
+					"cullface": "west"
+				},
+				"down": {
+					"uv": [
+						14.02344,
+						5.25,
+						14.75,
+						6
+					],
+					"texture": "#north",
+					"cullface": "down"
+				}
+			}
+		},
+		{
+			"from": [
+				13,
+				0,
+				0
+			],
+			"to": [
+				16,
+				3,
+				3
+			],
+			"faces": {
+				"north": {
+					"uv": [
+						14.75,
+						5.25,
+						15.49805,
+						5.99961
+					],
+					"texture": "#north",
+					"cullface": "north"
+				},
+				"east": {
+					"uv": [
+						12.5,
+						3.75,
+						13.25,
+						4.5
+					],
+					"texture": "#north",
+					"cullface": "east"
+				},
+				"south": {
+					"uv": [
+						13.25,
+						3.75,
+						14,
+						4.5
+					],
+					"texture": "#north"
+				},
+				"west": {
+					"uv": [
+						13.25,
+						3,
+						14,
+						3.74961
+					],
+					"texture": "#north"
+				},
+				"down": {
+					"uv": [
+						14,
+						3,
+						14.75,
+						3.75
+					],
+					"texture": "#north",
+					"cullface": "down"
+				}
+			}
+		}
+	]
+}

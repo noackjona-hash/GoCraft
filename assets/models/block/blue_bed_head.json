@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:block/template_bed_head",
+  "textures": {
+    "east": "minecraft:block/bed/blue",
+    "up": "minecraft:block/bed/blue",
+    "west": "minecraft:block/bed/blue"
+  }
+}

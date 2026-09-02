@@ -1,0 +1,7 @@
+{
+  "parent": "minecraft:block/template_sign_rot_2",
+  "textures": {
+    "sign": "minecraft:block/signs/warped",
+    "particle": "minecraft:block/signs/warped"
+  }
+}

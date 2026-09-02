@@ -1,0 +1,7 @@
+{
+  "parent": "minecraft:block/template_wall_hanging_sign",
+  "textures": {
+    "sign": "minecraft:block/signs/hanging_spruce",
+    "particle": "minecraft:block/signs/hanging_spruce"
+  }
+}

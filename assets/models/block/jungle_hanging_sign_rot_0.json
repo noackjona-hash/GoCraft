@@ -1,0 +1,7 @@
+{
+  "parent": "minecraft:block/template_hanging_sign_rot_0",
+  "textures": {
+    "sign": "minecraft:block/signs/hanging_jungle",
+    "particle": "minecraft:block/signs/hanging_jungle"
+  }
+}

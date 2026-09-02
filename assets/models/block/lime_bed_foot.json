@@ -1,0 +1,9 @@
+{
+  "parent": "minecraft:block/template_bed_foot",
+  "textures": {
+    "east": "minecraft:block/bed/lime",
+    "south": "minecraft:block/bed/lime",
+    "up": "minecraft:block/bed/lime",
+    "west": "minecraft:block/bed/lime"
+  }
+}

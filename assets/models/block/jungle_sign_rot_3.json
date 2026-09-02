@@ -1,0 +1,7 @@
+{
+  "parent": "minecraft:block/template_sign_rot_3",
+  "textures": {
+    "sign": "minecraft:block/signs/jungle",
+    "particle": "minecraft:block/signs/jungle"
+  }
+}

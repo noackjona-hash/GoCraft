@@ -1,0 +1,7 @@
+{
+  "parent": "minecraft:block/template_wall_sign",
+  "textures": {
+    "sign": "minecraft:block/signs/spruce",
+    "particle": "minecraft:block/signs/spruce"
+  }
+}

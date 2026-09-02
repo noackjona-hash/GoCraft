@@ -1,0 +1,7 @@
+{
+  "parent": "minecraft:block/template_hanging_sign_rot_1",
+  "textures": {
+    "sign": "minecraft:block/signs/hanging_acacia",
+    "particle": "minecraft:block/signs/hanging_acacia"
+  }
+}

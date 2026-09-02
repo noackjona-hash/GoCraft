@@ -1,0 +1,7 @@
+{
+  "parent": "minecraft:block/template_wall_sign",
+  "textures": {
+    "sign": "minecraft:block/signs/crimson",
+    "particle": "minecraft:block/signs/crimson"
+  }
+}
