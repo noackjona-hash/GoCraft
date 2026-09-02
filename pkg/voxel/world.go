@@ -216,7 +216,16 @@ func (w *VoxelWorld) generateChunk(cx, cz int) *ChunkData {
 
 			if ty > WaterLevel && chunk.Blocks[tx][ty][tz] == BlockGrass {
 				treeHeight := 4 + (seed % 3) // 4 to 6 block tall trees
-				growTreeInChunk(chunk, tx, ty+1, tz, treeHeight)
+				
+				treeType := TreeSmallOak
+				typeRoll := seed % 100
+				if typeRoll < 15 {
+					treeType = TreeLargeOak
+				} else if typeRoll < 30 {
+					treeType = TreeBirch
+				}
+				
+				growTreeInChunk(chunk, tx, ty+1, tz, treeHeight, treeType, seed)
 			}
 		}
 	}
@@ -224,29 +233,118 @@ func (w *VoxelWorld) generateChunk(cx, cz int) *ChunkData {
 	return chunk
 }
 
-func growTreeInChunk(chunk *ChunkData, x, y, z, height int) {
+type TreeType int
+
+const (
+	TreeSmallOak TreeType = iota
+	TreeLargeOak
+	TreeBirch
+)
+
+// growTreeInChunk generates tree logs and leaf canopies, constrained within the chunk.
+func growTreeInChunk(chunk *ChunkData, x, y, z, height int, treeType TreeType, seed int) {
+	logBlock := BlockOakLog
+	leafBlock := BlockOakLeaves
+
+	if treeType == TreeBirch {
+		logBlock = BlockBirchLog
+		leafBlock = BlockBirchLeaves
+		height += 2 // Birch is usually taller
+	}
+
+	isLargeOak := (treeType == TreeLargeOak)
+	if isLargeOak {
+		height += 5 // Large oak is 9-11 tall
+	}
+
+	// 1. Grow Trunk
 	for h := 0; h < height; h++ {
 		if y+h < WorldHeight {
-			chunk.Blocks[x][y+h][z] = BlockOakLog
+			chunk.Blocks[x][y+h][z] = logBlock
 		}
 	}
 
-	topY := y + height - 1
+	// 2. Grow Branches for Large Oak
+	var branchEnds [][3]int
+	if isLargeOak {
+		branchCount := 3 + (seed % 3)
+		for b := 0; b < branchCount; b++ {
+			bY := y + 3 + (seed*17+b*31)%(height-4)
+			dirX := -2 + (seed*13+b*7)%5
+			dirZ := -2 + (seed*29+b*11)%5
+			if dirX == 0 && dirZ == 0 {
+				dirX = 1
+			}
 
-	for lx := -2; lx <= 2; lx++ {
-		for lz := -2; lz <= 2; lz++ {
-			for ly := -1; ly <= 2; ly++ {
-				// Corner rounding for natural spherical tree leaf canopies
-				if (math.Abs(float64(lx)) == 2 && math.Abs(float64(lz)) == 2) && (ly >= 1 || math.Abs(float64(lx))+math.Abs(float64(lz)) > 3) {
-					continue
+			currX, currY, currZ := float32(x), float32(bY), float32(z)
+			length := 2 + (seed*19+b*5)%3
+			for l := 0; l < length; l++ {
+				currX += float32(dirX) * 0.7
+				currY += 0.5 // branches grow up
+				currZ += float32(dirZ) * 0.7
+				
+				bx, by, bz := int(currX), int(currY), int(currZ)
+				if bx >= 0 && bx < ChunkSize && bz >= 0 && bz < ChunkSize && by < WorldHeight {
+					chunk.Blocks[bx][by][bz] = logBlock
+					if l == length-1 {
+						branchEnds = append(branchEnds, [3]int{bx, by, bz})
+					}
 				}
-				leafX := x + lx
-				leafY := topY + ly
-				leafZ := z + lz
+			}
+		}
+	}
 
-				if leafX >= 0 && leafX < ChunkSize && leafZ >= 0 && leafZ < ChunkSize && leafY >= 0 && leafY < WorldHeight {
-					if chunk.Blocks[leafX][leafY][leafZ] == BlockAir {
-						chunk.Blocks[leafX][leafY][leafZ] = BlockOakLeaves
+	// 3. Grow Canopies
+	topY := y + height - 1
+	canopyCenters := [][3]int{{x, topY, z}}
+	if isLargeOak {
+		canopyCenters = append(canopyCenters, branchEnds...)
+	}
+
+	for i, center := range canopyCenters {
+		cx, cy, cz := center[0], center[1], center[2]
+		
+		// Large oak main canopy is smaller (branches have their own canopies)
+		radYStart, radYEnd := -1, 2
+		if isLargeOak && i == 0 {
+			radYStart, radYEnd = -1, 1
+		} else if isLargeOak { // Branch canopies are rounder
+			radYStart, radYEnd = -1, 1
+		}
+		
+		for lx := -2; lx <= 2; lx++ {
+			for lz := -2; lz <= 2; lz++ {
+				for ly := radYStart; ly <= radYEnd; ly++ {
+					// Rounding the corners organically
+					isCorner := math.Abs(float64(lx)) == 2 && math.Abs(float64(lz)) == 2
+					isTopOrBottom := ly == radYEnd || ly == radYStart
+					
+					// Randomize corners heavily for organic look
+					cornerRandomizer := ((x+lx)*13 + (y+ly)*17 + (z+lz)*23 + seed) % 100
+					
+					if isCorner {
+						if isTopOrBottom {
+							continue // Always trim corners on very top/bottom layer
+						} else if cornerRandomizer > 40 {
+							continue // 60% chance to trim corners on middle layers
+						}
+					}
+					
+					// Trim cross edges on very top layer
+					if ly == radYEnd && (math.Abs(float64(lx)) > 1 || math.Abs(float64(lz)) > 1) {
+						if cornerRandomizer > 30 {
+							continue
+						}
+					}
+
+					leafX := cx + lx
+					leafY := cy + ly
+					leafZ := cz + lz
+
+					if leafX >= 0 && leafX < ChunkSize && leafZ >= 0 && leafZ < ChunkSize && leafY >= 0 && leafY < WorldHeight {
+						if chunk.Blocks[leafX][leafY][leafZ] == BlockAir {
+							chunk.Blocks[leafX][leafY][leafZ] = leafBlock
+						}
 					}
 				}
 			}

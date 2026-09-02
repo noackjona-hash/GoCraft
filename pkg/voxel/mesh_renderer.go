@@ -57,13 +57,20 @@ func GetBlockTextureAtlasPos(b BlockType, face FaceType) (int, int) {
 		return 9, 0
 	case BlockOakLog:
 		if face == FaceTop || face == FaceBottom {
-			return 12, 0
+			return 12, 0 // Oak Log Top
 		}
-		return 11, 0
-	case BlockOakPlanks:
-		return 13, 0
+		return 11, 0 // Oak Log Side
+	case BlockBirchLog:
+		if face == FaceTop || face == FaceBottom {
+			return 10, 2 // Birch Log Top
+		}
+		return 9, 2 // Birch Log Side
 	case BlockOakLeaves:
 		return 14, 0
+	case BlockBirchLeaves:
+		return 11, 2
+	case BlockOakPlanks:
+		return 13, 0
 	case BlockGlass:
 		return 15, 0
 	case BlockCoalOre:

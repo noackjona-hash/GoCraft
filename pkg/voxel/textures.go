@@ -429,6 +429,9 @@ func generateProceduralBase(img *rl.Image) {
 	drawSteveShirt(img, 6, 2)
 	drawSteveSkin(img, 7, 2)
 	drawStevePants(img, 8, 2)
+	drawBirchLogSide(img, 9, 2)
+	drawBirchLogTop(img, 10, 2)
+	drawBirchLeaves(img, 11, 2)
 
 	// Row 3 & 4: Tools & Items
 	drawStick(img, 0, 3)
@@ -640,6 +643,44 @@ func drawOakLeaves(img *rl.Image, col, row int) {
 			} else {
 				g := uint8(90 + (x*7+y*11)%40)
 				setPixel(img, col, row, x, y, rl.NewColor(35, g, 20, 255))
+			}
+		}
+	}
+}
+
+func drawBirchLogSide(img *rl.Image, col, row int) {
+	for y := 0; y < 16; y++ {
+		for x := 0; x < 16; x++ {
+			bark := uint8(210 + (x*7+y*5)%30) // white bark
+			// Birch dark horizontal stripes
+			if (y == 3 || y == 9 || y == 14) && (x%3 == 0 || x%5 == 0) {
+				bark = 40
+			}
+			setPixel(img, col, row, x, y, rl.NewColor(bark, bark+5, bark-5, 255))
+		}
+	}
+}
+
+func drawBirchLogTop(img *rl.Image, col, row int) {
+	for y := 0; y < 16; y++ {
+		for x := 0; x < 16; x++ {
+			dx := float32(x - 8)
+			dy := float32(y - 8)
+			dist := int(dx*dx + dy*dy)
+			wood := uint8(190 + (dist%15)*3)
+			setPixel(img, col, row, x, y, rl.NewColor(wood, wood-10, wood-40, 255))
+		}
+	}
+}
+
+func drawBirchLeaves(img *rl.Image, col, row int) {
+	for y := 0; y < 16; y++ {
+		for x := 0; x < 16; x++ {
+			if (x+y*3)%4 == 0 {
+				setPixel(img, col, row, x, y, rl.Blank)
+			} else {
+				g := uint8(120 + (x*5+y*13)%50) // slightly lighter green than oak
+				setPixel(img, col, row, x, y, rl.NewColor(85, g, 50, 255))
 			}
 		}
 	}

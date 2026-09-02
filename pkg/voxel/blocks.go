@@ -17,6 +17,8 @@ const (
 	BlockOakLog
 	BlockOakPlanks
 	BlockOakLeaves
+	BlockBirchLog
+	BlockBirchLeaves
 	BlockGlass
 	BlockSand
 	BlockSandstone
@@ -108,7 +110,7 @@ func GetBlockDrop(b BlockType) BlockType {
 	if def, exists := BlockRegistry[b]; exists && def.DropItem != BlockAir {
 		return def.DropItem
 	}
-	if b == BlockOakLeaves || b == BlockGlass || b == BlockWater || b == BlockBedrock {
+	if b == BlockOakLeaves || b == BlockBirchLeaves || b == BlockGlass || b == BlockWater || b == BlockBedrock {
 		return BlockAir
 	}
 	return b
@@ -208,6 +210,25 @@ var BlockRegistry = map[BlockType]BlockDef{
 		IsSolid:       true,
 		IsTransparent: true,
 		Hardness:      0.25,
+	},
+	BlockBirchLog: {
+		Type:        BlockBirchLog,
+		Name:        "Birch Log",
+		TopColor:    rl.NewColor(190, 180, 150, 255),
+		SideColor:   rl.NewColor(220, 225, 215, 255),
+		BottomColor: rl.NewColor(190, 180, 150, 255),
+		IsSolid:     true,
+		Hardness:    2.0,
+	},
+	BlockBirchLeaves: {
+		Type:          BlockBirchLeaves,
+		Name:          "Birch Leaves",
+		TopColor:      rl.NewColor(100, 150, 70, 255),
+		SideColor:     rl.NewColor(100, 150, 70, 255),
+		BottomColor:   rl.NewColor(100, 150, 70, 255),
+		IsSolid:       true,
+		IsTransparent: true,
+		Hardness:      0.2,
 	},
 	BlockGlass: {
 		Type:          BlockGlass,

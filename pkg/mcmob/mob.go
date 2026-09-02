@@ -216,8 +216,24 @@ func (m *Mob) Update(dt float32, playerPos rl.Vector3, playerHealth *float32, wo
 	}
 
 	// Auto step-up / jump when walking against a 1-block wall
-	newX := m.Pos.X + m.Vel.X*dt
-	newZ := m.Pos.Z + m.Vel.Z*dt
+	// Project the bounding box forward by slightly more than half-width to detect walls before hitting them
+	lookAheadDist := (m.Width * 0.5) + 0.1
+	dirX := float32(0)
+	if m.Vel.X > 0 {
+		dirX = 1
+	} else if m.Vel.X < 0 {
+		dirX = -1
+	}
+	
+	dirZ := float32(0)
+	if m.Vel.Z > 0 {
+		dirZ = 1
+	} else if m.Vel.Z < 0 {
+		dirZ = -1
+	}
+
+	newX := m.Pos.X + dirX*lookAheadDist
+	newZ := m.Pos.Z + dirZ*lookAheadDist
 
 	if m.IsGrounded && (m.Vel.X != 0 || m.Vel.Z != 0) {
 		bx := int(math.Floor(float64(newX)))
