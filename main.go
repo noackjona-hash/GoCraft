@@ -489,7 +489,17 @@ func main() {
 						heldBlock := gui.GetActiveBlock()
 						bDef := voxel.BlockRegistry[heldBlock]
 
-						if heldBlock != voxel.BlockAir && !bDef.IsTool && heldBlock != voxel.ItemStick && heldBlock != voxel.ItemCoal && heldBlock != voxel.ItemDiamond && heldBlock != voxel.ItemIronIngot && heldBlock != voxel.ItemGoldIngot {
+						if bDef.IsFood {
+							// Eat the food instead of placing it
+							player.Health += float32(bDef.FoodPoints)
+							if player.Health > 20.0 {
+								player.Health = 20.0
+							}
+							audioEngine.TriggerBlockPlace() // temporary sound for eating
+							if player.Mode == mcplayer.GameModeSurvival {
+								gui.ConsumeActiveItem()
+							}
+						} else if heldBlock != voxel.BlockAir && !bDef.IsTool && heldBlock != voxel.ItemStick && heldBlock != voxel.ItemCoal && heldBlock != voxel.ItemDiamond && heldBlock != voxel.ItemIronIngot && heldBlock != voxel.ItemGoldIngot {
 							playerBlockX := int(math.Floor(float64(player.Pos.X)))
 							playerBlockY1 := int(math.Floor(float64(player.Pos.Y)))
 							playerBlockY2 := int(math.Floor(float64(player.Pos.Y + 1.0)))
@@ -645,11 +655,13 @@ func main() {
 		// 3. 3D Infinite Voxel World (Multi-pass Opaque, Cutout & Translucent Water on GPU)
 		chunkManager.Render3D(camPos, lookDir)
 
+		rl.BeginShaderMode(customShader)
 		// 4. 3D Living Mobs (Zombies, Skeletons, Creepers, Pigs, Cows, Sheep)
 		mobManager.Render3D()
 
 		// 4b. 3D Dropped Items
 		mobManager.RenderItems(atlas)
+		rl.EndShaderMode()
 
 		// 5. Targeted Block Wireframe Outline & 10-Stage Mining Cracks Overlay
 		if rayResult.Hit && !isMenuOpen {

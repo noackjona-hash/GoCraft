@@ -179,7 +179,10 @@ func (m *Mob) Update(dt float32, playerPos rl.Vector3, playerHealth *float32, wo
 			m.Vel.Z *= 0.8
 		}
 	} else {
-		// Passive Animal AI
+		// Rotation & Hover animations
+		item.RotationY += dt * 1.0 
+		item.HoverOffset += (float32(math.Sin(float64(item.HoverOffset))) * 0.1)
+		
 		m.StateTimer -= dt
 		if m.StateTimer <= 0 {
 			if rand.Float32() < 0.6 {
@@ -349,69 +352,85 @@ func (m *Mob) Render3D(mm *MobManager) {
 }
 
 // drawBoxUV draws a textured box using standard Minecraft texture layout
-func drawBoxUV(x, y, z, w, h, d float32, texU, texV, texW, texH float32, imgW, imgH float32, tint rl.Color) {
-	// Minecraft texture map layout for a standard box of size (texW, texH, texD):
-	// It's a bit complex to map dynamically, so we'll do a simplified mapping using the provided u, v, w, h
-	// Assuming the provided U, V is the top-left of the Front face, and we map the same to all sides for simplicity,
-	// OR we try to map the whole box using the U, V as the top-left of the standard MC layout.
+func drawBoxUV(x, y, z, w, h, d float32, u, v, tw, th, td float32, imgW, imgH float32, tint rl.Color) {
 	// Standard MC layout (starting at U,V):
-	// Top: (U+D, V)
-	// Bottom: (U+D+W, V)
-	// Right: (U, V+D)
-	// Front: (U+D, V+D)
-	// Left: (U+D+W, V+D)
-	// Back: (U+D+W+D, V+D)
-	
-	// Since we are given width/height in world units (w,h,d) and texture coordinates in pixels (texW, texH),
-	// we will calculate UVs by mapping the front face, and roughly mapping others.
-	
-	tw := texW / imgW
-	th := texH / imgH
-	u0 := texU / imgW
-	v0 := texV / imgH
-	u1 := u0 + tw
-	v1 := v0 + th
+	// Top:    (u+td, v)          size: (tw, td)
+	// Bottom: (u+td+tw, v)       size: (tw, td)
+	// Right:  (u, v+td)          size: (td, th)
+	// Front:  (u+td, v+td)       size: (tw, th)
+	// Left:   (u+td+tw, v+td)    size: (td, th)
+	// Back:   (u+td+tw+td, v+td) size: (tw, th)
 
 	hsW, hsH, hsD := w/2, h/2, d/2
-
 	rl.Color4ub(tint.R, tint.G, tint.B, tint.A)
 	rl.Begin(rl.Quads)
 
-	// Front (+Z)
-	rl.TexCoord2f(u0, v1); rl.Vertex3f(x-hsW, y-hsH, z+hsD)
-	rl.TexCoord2f(u1, v1); rl.Vertex3f(x+hsW, y-hsH, z+hsD)
-	rl.TexCoord2f(u1, v0); rl.Vertex3f(x+hsW, y+hsH, z+hsD)
-	rl.TexCoord2f(u0, v0); rl.Vertex3f(x-hsW, y+hsH, z+hsD)
+	// Helper to add quad with UVs
+	addQuad := func(p0, p1, p2, p3 rl.Vector3, texX, texY, texW, texH float32) {
+		u0 := texX / imgW
+		v0 := texY / imgH
+		u1 := (texX + texW) / imgW
+		v1 := (texY + texH) / imgH
 
-	// Back (-Z)
-	rl.TexCoord2f(u1, v1); rl.Vertex3f(x+hsW, y-hsH, z-hsD)
-	rl.TexCoord2f(u0, v1); rl.Vertex3f(x-hsW, y-hsH, z-hsD)
-	rl.TexCoord2f(u0, v0); rl.Vertex3f(x-hsW, y+hsH, z-hsD)
-	rl.TexCoord2f(u1, v0); rl.Vertex3f(x+hsW, y+hsH, z-hsD)
+		rl.TexCoord2f(u0, v1); rl.Vertex3f(p0.X, p0.Y, p0.Z)
+		rl.TexCoord2f(u1, v1); rl.Vertex3f(p1.X, p1.Y, p1.Z)
+		rl.TexCoord2f(u1, v0); rl.Vertex3f(p2.X, p2.Y, p2.Z)
+		rl.TexCoord2f(u0, v0); rl.Vertex3f(p3.X, p3.Y, p3.Z)
+	}
 
-	// Right (+X)
-	rl.TexCoord2f(u0, v1); rl.Vertex3f(x+hsW, y-hsH, z+hsD)
-	rl.TexCoord2f(u1, v1); rl.Vertex3f(x+hsW, y-hsH, z-hsD)
-	rl.TexCoord2f(u1, v0); rl.Vertex3f(x+hsW, y+hsH, z-hsD)
-	rl.TexCoord2f(u0, v0); rl.Vertex3f(x+hsW, y+hsH, z+hsD)
+	// Front (+Z) (MC Front)
+	addQuad(
+		rl.Vector3{X: x - hsW, Y: y - hsH, Z: z + hsD},
+		rl.Vector3{X: x + hsW, Y: y - hsH, Z: z + hsD},
+		rl.Vector3{X: x + hsW, Y: y + hsH, Z: z + hsD},
+		rl.Vector3{X: x - hsW, Y: y + hsH, Z: z + hsD},
+		u+td, v+td, tw, th,
+	)
 
-	// Left (-X)
-	rl.TexCoord2f(u1, v1); rl.Vertex3f(x-hsW, y-hsH, z-hsD)
-	rl.TexCoord2f(u0, v1); rl.Vertex3f(x-hsW, y-hsH, z+hsD)
-	rl.TexCoord2f(u0, v0); rl.Vertex3f(x-hsW, y+hsH, z+hsD)
-	rl.TexCoord2f(u1, v0); rl.Vertex3f(x-hsW, y+hsH, z-hsD)
+	// Back (-Z) (MC Back)
+	addQuad(
+		rl.Vector3{X: x + hsW, Y: y - hsH, Z: z - hsD},
+		rl.Vector3{X: x - hsW, Y: y - hsH, Z: z - hsD},
+		rl.Vector3{X: x - hsW, Y: y + hsH, Z: z - hsD},
+		rl.Vector3{X: x + hsW, Y: y + hsH, Z: z - hsD},
+		u+td+tw+td, v+td, tw, th,
+	)
 
-	// Top (+Y)
-	rl.TexCoord2f(u0, v1); rl.Vertex3f(x-hsW, y+hsH, z+hsD)
-	rl.TexCoord2f(u1, v1); rl.Vertex3f(x+hsW, y+hsH, z+hsD)
-	rl.TexCoord2f(u1, v0); rl.Vertex3f(x+hsW, y+hsH, z-hsD)
-	rl.TexCoord2f(u0, v0); rl.Vertex3f(x-hsW, y+hsH, z-hsD)
+	// Right (+X) (MC Left side of entity, looking from front)
+	addQuad(
+		rl.Vector3{X: x + hsW, Y: y - hsH, Z: z + hsD},
+		rl.Vector3{X: x + hsW, Y: y - hsH, Z: z - hsD},
+		rl.Vector3{X: x + hsW, Y: y + hsH, Z: z - hsD},
+		rl.Vector3{X: x + hsW, Y: y + hsH, Z: z + hsD},
+		u+td+tw, v+td, td, th,
+	)
 
-	// Bottom (-Y)
-	rl.TexCoord2f(u0, v1); rl.Vertex3f(x-hsW, y-hsH, z-hsD)
-	rl.TexCoord2f(u1, v1); rl.Vertex3f(x+hsW, y-hsH, z-hsD)
-	rl.TexCoord2f(u1, v0); rl.Vertex3f(x+hsW, y-hsH, z+hsD)
-	rl.TexCoord2f(u0, v0); rl.Vertex3f(x-hsW, y-hsH, z+hsD)
+	// Left (-X) (MC Right side of entity, looking from front)
+	addQuad(
+		rl.Vector3{X: x - hsW, Y: y - hsH, Z: z - hsD},
+		rl.Vector3{X: x - hsW, Y: y - hsH, Z: z + hsD},
+		rl.Vector3{X: x - hsW, Y: y + hsH, Z: z + hsD},
+		rl.Vector3{X: x - hsW, Y: y + hsH, Z: z - hsD},
+		u, v+td, td, th,
+	)
+
+	// Top (+Y) (MC Top)
+	addQuad(
+		rl.Vector3{X: x - hsW, Y: y + hsH, Z: z + hsD},
+		rl.Vector3{X: x + hsW, Y: y + hsH, Z: z + hsD},
+		rl.Vector3{X: x + hsW, Y: y + hsH, Z: z - hsD},
+		rl.Vector3{X: x - hsW, Y: y + hsH, Z: z - hsD},
+		u+td, v, tw, td,
+	)
+
+	// Bottom (-Y) (MC Bottom)
+	addQuad(
+		rl.Vector3{X: x - hsW, Y: y - hsH, Z: z - hsD},
+		rl.Vector3{X: x + hsW, Y: y - hsH, Z: z - hsD},
+		rl.Vector3{X: x + hsW, Y: y - hsH, Z: z + hsD},
+		rl.Vector3{X: x - hsW, Y: y - hsH, Z: z + hsD},
+		u+td+tw, v, tw, td,
+	)
 
 	rl.End()
 }
@@ -421,20 +440,20 @@ func (m *Mob) renderZombie(tint rl.Color, tex rl.Texture2D) {
 	if tex.ID > 0 {
 		rl.SetTexture(tex.ID)
 		
-		// Head (8x8)
-		drawBoxUV(0, 1.62, 0, 0.48, 0.48, 0.48, 8, 8, 8, 8, 64, 64, tint)
+		// Head (8x8x8)
+		drawBoxUV(0, 1.62, 0, 0.48, 0.48, 0.48, 0, 0, 8, 8, 8, 64, 64, tint)
 		
-		// Torso
-		drawBoxUV(0, 1.08, 0, 0.48, 0.68, 0.24, 20, 20, 8, 12, 64, 64, tint)
+		// Torso (8x12x4)
+		drawBoxUV(0, 1.08, 0, 0.48, 0.68, 0.24, 16, 16, 8, 12, 4, 64, 64, tint)
 
-		// Legs
+		// Legs (4x12x4)
 		legSwing := float32(math.Sin(float64(m.WalkBobbing))) * 0.28
-		drawBoxUV(-0.13, 0.38, legSwing, 0.22, 0.72, 0.22, 4, 20, 4, 12, 64, 64, tint)
-		drawBoxUV(0.13, 0.38, -legSwing, 0.22, 0.72, 0.22, 4, 20, 4, 12, 64, 64, tint)
+		drawBoxUV(-0.13, 0.38, legSwing, 0.22, 0.72, 0.22, 0, 16, 4, 12, 4, 64, 64, tint)
+		drawBoxUV(0.13, 0.38, -legSwing, 0.22, 0.72, 0.22, 0, 16, 4, 12, 4, 64, 64, tint)
 
-		// Arms
-		drawBoxUV(-0.34, 1.25, 0.28, 0.20, 0.20, 0.55, 44, 20, 4, 12, 64, 64, tint)
-		drawBoxUV(0.34, 1.25, 0.28, 0.20, 0.20, 0.55, 44, 20, 4, 12, 64, 64, tint)
+		// Arms (4x12x4)
+		drawBoxUV(-0.34, 1.25, 0.28, 0.20, 0.20, 0.55, 40, 16, 4, 12, 4, 64, 64, tint)
+		drawBoxUV(0.34, 1.25, 0.28, 0.20, 0.20, 0.55, 40, 16, 4, 12, 4, 64, 64, tint)
 		
 		rl.SetTexture(0)
 	} else {
@@ -448,15 +467,15 @@ func (m *Mob) renderSkeleton(tint rl.Color, tex rl.Texture2D) {
 	if tex.ID > 0 {
 		rl.SetTexture(tex.ID)
 		
-		drawBoxUV(0, 1.62, 0, 0.46, 0.46, 0.46, 8, 8, 8, 8, 64, 32, tint) // Skull
-		drawBoxUV(0, 1.08, 0, 0.42, 0.68, 0.18, 20, 20, 8, 12, 64, 32, tint) // Ribcage
+		drawBoxUV(0, 1.62, 0, 0.46, 0.46, 0.46, 0, 0, 8, 8, 8, 64, 32, tint) // Skull
+		drawBoxUV(0, 1.08, 0, 0.42, 0.68, 0.18, 16, 16, 8, 12, 4, 64, 32, tint) // Ribcage
 
 		legSwing := float32(math.Sin(float64(m.WalkBobbing))) * 0.28
-		drawBoxUV(-0.12, 0.38, legSwing, 0.14, 0.72, 0.14, 4, 20, 2, 12, 64, 32, tint)
-		drawBoxUV(0.12, 0.38, -legSwing, 0.14, 0.72, 0.14, 4, 20, 2, 12, 64, 32, tint)
+		drawBoxUV(-0.12, 0.38, legSwing, 0.14, 0.72, 0.14, 0, 16, 2, 12, 2, 64, 32, tint)
+		drawBoxUV(0.12, 0.38, -legSwing, 0.14, 0.72, 0.14, 0, 16, 2, 12, 2, 64, 32, tint)
 
-		drawBoxUV(-0.28, 1.22, 0.25, 0.12, 0.12, 0.52, 44, 20, 2, 12, 64, 32, tint)
-		drawBoxUV(0.28, 1.22, 0.25, 0.12, 0.12, 0.52, 44, 20, 2, 12, 64, 32, tint)
+		drawBoxUV(-0.28, 1.22, 0.25, 0.12, 0.12, 0.52, 40, 16, 2, 12, 2, 64, 32, tint)
+		drawBoxUV(0.28, 1.22, 0.25, 0.12, 0.12, 0.52, 40, 16, 2, 12, 2, 64, 32, tint)
 		
 		rl.SetTexture(0)
 	} else {
@@ -476,14 +495,14 @@ func (m *Mob) renderCreeper(tint rl.Color, tex rl.Texture2D) {
 	
 	if tex.ID > 0 {
 		rl.SetTexture(tex.ID)
-		drawBoxUV(0, 1.35*scale, 0, 0.48*scale, 0.48*scale, 0.48*scale, 8, 8, 8, 8, 64, 32, tint) // Head
-		drawBoxUV(0, 0.80*scale, 0, 0.44*scale, 0.64*scale, 0.24*scale, 20, 16, 8, 12, 64, 32, tint) // Torso
+		drawBoxUV(0, 1.35*scale, 0, 0.48*scale, 0.48*scale, 0.48*scale, 0, 0, 8, 8, 8, 64, 32, tint) // Head
+		drawBoxUV(0, 0.80*scale, 0, 0.44*scale, 0.64*scale, 0.24*scale, 16, 16, 8, 12, 4, 64, 32, tint) // Torso
 		
 		legSwing := float32(math.Sin(float64(m.WalkBobbing))) * 0.22
-		drawBoxUV(-0.15, 0.22, 0.16+legSwing, 0.18, 0.44, 0.18, 4, 16, 4, 6, 64, 32, tint)
-		drawBoxUV(0.15, 0.22, 0.16-legSwing, 0.18, 0.44, 0.18, 4, 16, 4, 6, 64, 32, tint)
-		drawBoxUV(-0.15, 0.22, -0.16-legSwing, 0.18, 0.44, 0.18, 4, 16, 4, 6, 64, 32, tint)
-		drawBoxUV(0.15, 0.22, -0.16+legSwing, 0.18, 0.44, 0.18, 4, 16, 4, 6, 64, 32, tint)
+		drawBoxUV(-0.15, 0.22, 0.16+legSwing, 0.18, 0.44, 0.18, 0, 16, 4, 6, 4, 64, 32, tint)
+		drawBoxUV(0.15, 0.22, 0.16-legSwing, 0.18, 0.44, 0.18, 0, 16, 4, 6, 4, 64, 32, tint)
+		drawBoxUV(-0.15, 0.22, -0.16-legSwing, 0.18, 0.44, 0.18, 0, 16, 4, 6, 4, 64, 32, tint)
+		drawBoxUV(0.15, 0.22, -0.16+legSwing, 0.18, 0.44, 0.18, 0, 16, 4, 6, 4, 64, 32, tint)
 		rl.SetTexture(0)
 	} else {
 		rl.DrawCube(rl.Vector3{X: 0, Y: 1.35 * scale, Z: 0}, 0.48*scale, 0.48*scale, 0.48*scale, tint)
@@ -494,14 +513,14 @@ func (m *Mob) renderCreeper(tint rl.Color, tex rl.Texture2D) {
 func (m *Mob) renderPig(tint rl.Color, tex rl.Texture2D) {
 	if tex.ID > 0 {
 		rl.SetTexture(tex.ID)
-		drawBoxUV(0, 0.52, 0, 0.58, 0.48, 0.78, 28, 16, 10, 8, 64, 32, tint) // Body
-		drawBoxUV(0, 0.68, 0.48, 0.44, 0.44, 0.44, 8, 8, 8, 8, 64, 32, tint) // Head
+		drawBoxUV(0, 0.52, 0, 0.58, 0.48, 0.78, 28, 8, 10, 16, 8, 64, 32, tint) // Body
+		drawBoxUV(0, 0.68, 0.48, 0.44, 0.44, 0.44, 0, 0, 8, 8, 8, 64, 32, tint) // Head
 
 		legSwing := float32(math.Sin(float64(m.WalkBobbing))) * 0.24
-		drawBoxUV(-0.18, 0.18, 0.24+legSwing, 0.18, 0.36, 0.18, 4, 16, 4, 6, 64, 32, tint)
-		drawBoxUV(0.18, 0.18, 0.24-legSwing, 0.18, 0.36, 0.18, 4, 16, 4, 6, 64, 32, tint)
-		drawBoxUV(-0.18, 0.18, -0.24-legSwing, 0.18, 0.36, 0.18, 4, 16, 4, 6, 64, 32, tint)
-		drawBoxUV(0.18, 0.18, -0.24+legSwing, 0.18, 0.36, 0.18, 4, 16, 4, 6, 64, 32, tint)
+		drawBoxUV(-0.18, 0.18, 0.24+legSwing, 0.18, 0.36, 0.18, 0, 16, 4, 6, 4, 64, 32, tint)
+		drawBoxUV(0.18, 0.18, 0.24-legSwing, 0.18, 0.36, 0.18, 0, 16, 4, 6, 4, 64, 32, tint)
+		drawBoxUV(-0.18, 0.18, -0.24-legSwing, 0.18, 0.36, 0.18, 0, 16, 4, 6, 4, 64, 32, tint)
+		drawBoxUV(0.18, 0.18, -0.24+legSwing, 0.18, 0.36, 0.18, 0, 16, 4, 6, 4, 64, 32, tint)
 		rl.SetTexture(0)
 	} else {
 		rl.DrawCube(rl.Vector3{X: 0, Y: 0.52, Z: 0}, 0.58, 0.48, 0.78, tint)
@@ -511,14 +530,14 @@ func (m *Mob) renderPig(tint rl.Color, tex rl.Texture2D) {
 func (m *Mob) renderCow(tint rl.Color, tex rl.Texture2D) {
 	if tex.ID > 0 {
 		rl.SetTexture(tex.ID)
-		drawBoxUV(0, 0.78, 0, 0.68, 0.62, 0.98, 28, 16, 12, 10, 64, 32, tint) // Body
-		drawBoxUV(0, 1.08, 0.58, 0.44, 0.44, 0.44, 8, 8, 8, 8, 64, 32, tint) // Head
+		drawBoxUV(0, 0.78, 0, 0.68, 0.62, 0.98, 18, 4, 12, 18, 10, 64, 32, tint) // Body
+		drawBoxUV(0, 1.08, 0.58, 0.44, 0.44, 0.44, 0, 0, 8, 8, 6, 64, 32, tint) // Head
 
 		legSwing := float32(math.Sin(float64(m.WalkBobbing))) * 0.24
-		drawBoxUV(-0.22, 0.24, 0.32+legSwing, 0.18, 0.48, 0.18, 4, 16, 4, 6, 64, 32, tint)
-		drawBoxUV(0.22, 0.24, 0.32-legSwing, 0.18, 0.48, 0.18, 4, 16, 4, 6, 64, 32, tint)
-		drawBoxUV(-0.22, 0.24, -0.32-legSwing, 0.18, 0.48, 0.18, 4, 16, 4, 6, 64, 32, tint)
-		drawBoxUV(0.22, 0.24, -0.32+legSwing, 0.18, 0.48, 0.18, 4, 16, 4, 6, 64, 32, tint)
+		drawBoxUV(-0.22, 0.24, 0.32+legSwing, 0.18, 0.48, 0.18, 0, 16, 4, 12, 4, 64, 32, tint)
+		drawBoxUV(0.22, 0.24, 0.32-legSwing, 0.18, 0.48, 0.18, 0, 16, 4, 12, 4, 64, 32, tint)
+		drawBoxUV(-0.22, 0.24, -0.32-legSwing, 0.18, 0.48, 0.18, 0, 16, 4, 12, 4, 64, 32, tint)
+		drawBoxUV(0.22, 0.24, -0.32+legSwing, 0.18, 0.48, 0.18, 0, 16, 4, 12, 4, 64, 32, tint)
 		rl.SetTexture(0)
 	} else {
 		rl.DrawCube(rl.Vector3{X: 0, Y: 0.78, Z: 0}, 0.68, 0.62, 0.98, tint)
@@ -528,14 +547,14 @@ func (m *Mob) renderCow(tint rl.Color, tex rl.Texture2D) {
 func (m *Mob) renderSheep(tint rl.Color, tex rl.Texture2D) {
 	if tex.ID > 0 {
 		rl.SetTexture(tex.ID)
-		drawBoxUV(0, 0.72, 0, 0.74, 0.64, 0.94, 28, 16, 10, 8, 64, 32, tint) // Body
-		drawBoxUV(0, 0.95, 0.56, 0.36, 0.36, 0.44, 8, 8, 8, 8, 64, 32, tint) // Head
+		drawBoxUV(0, 0.72, 0, 0.74, 0.64, 0.94, 28, 8, 8, 16, 6, 64, 32, tint) // Body
+		drawBoxUV(0, 0.95, 0.56, 0.36, 0.36, 0.44, 0, 0, 6, 6, 8, 64, 32, tint) // Head
 
 		legSwing := float32(math.Sin(float64(m.WalkBobbing))) * 0.24
-		drawBoxUV(-0.20, 0.20, 0.28+legSwing, 0.16, 0.40, 0.16, 4, 16, 4, 6, 64, 32, tint)
-		drawBoxUV(0.20, 0.20, 0.28-legSwing, 0.16, 0.40, 0.16, 4, 16, 4, 6, 64, 32, tint)
-		drawBoxUV(-0.20, 0.20, -0.28-legSwing, 0.16, 0.40, 0.16, 4, 16, 4, 6, 64, 32, tint)
-		drawBoxUV(0.20, 0.20, -0.28+legSwing, 0.16, 0.40, 0.16, 4, 16, 4, 6, 64, 32, tint)
+		drawBoxUV(-0.20, 0.20, 0.28+legSwing, 0.16, 0.40, 0.16, 0, 16, 4, 6, 4, 64, 32, tint)
+		drawBoxUV(0.20, 0.20, 0.28-legSwing, 0.16, 0.40, 0.16, 0, 16, 4, 6, 4, 64, 32, tint)
+		drawBoxUV(-0.20, 0.20, -0.28-legSwing, 0.16, 0.40, 0.16, 0, 16, 4, 6, 4, 64, 32, tint)
+		drawBoxUV(0.20, 0.20, -0.28+legSwing, 0.16, 0.40, 0.16, 0, 16, 4, 6, 4, 64, 32, tint)
 		rl.SetTexture(0)
 	} else {
 		rl.DrawCube(rl.Vector3{X: 0, Y: 0.72, Z: 0}, 0.74, 0.64, 0.94, tint)
