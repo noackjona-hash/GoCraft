@@ -655,7 +655,7 @@ func main() {
 		// 3. 3D Infinite Voxel World (Multi-pass Opaque, Cutout & Translucent Water on GPU)
 		chunkManager.Render3D(camPos, lookDir)
 
-		rl.BeginShaderMode(customShader)
+		rl.BeginShaderMode(chunkManager.CutoutShader)
 		// 4. 3D Living Mobs (Zombies, Skeletons, Creepers, Pigs, Cows, Sheep)
 		mobManager.Render3D()
 

@@ -40,7 +40,7 @@ func (item *ItemEntity) Update(dt float32, world *voxel.VoxelWorld) {
 	item.LifeTimer -= dt
 
 	// Rotation & Hover animations
-	item.RotationY += dt * 60.0 // rotate 60 degrees per second
+	item.RotationY += dt * 2.0 // rotate 2 radians per second (about 1 revolution per 3 seconds)
 	item.HoverOffset += dt * 3.0
 
 	// Gravity

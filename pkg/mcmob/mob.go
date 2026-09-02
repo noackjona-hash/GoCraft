@@ -179,9 +179,7 @@ func (m *Mob) Update(dt float32, playerPos rl.Vector3, playerHealth *float32, wo
 			m.Vel.Z *= 0.8
 		}
 	} else {
-		// Rotation & Hover animations
-		item.RotationY += dt * 1.0 
-		item.HoverOffset += (float32(math.Sin(float64(item.HoverOffset))) * 0.1)
+		// Passive Animal AI
 		
 		m.StateTimer -= dt
 		if m.StateTimer <= 0 {
