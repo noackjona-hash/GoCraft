@@ -209,7 +209,7 @@ func stitchResourcePack(img *rl.Image, blockDir, itemDir string, tileSize int32)
 		"torch.png":                   {{0, 2}},
 		"torch_on.png":                {{0, 2}},
 		"water_still.png":             {{1, 2}},
-		"water_flow.png":              {{1, 2}},
+		"water_flow.png":              {{0, 14}},
 		"spruce_log.png":              {{2, 2}},
 		"spruce_log_top.png":          {{3, 2}},
 		"spruce_leaves.png":           {{4, 2}},
@@ -278,6 +278,8 @@ func stitchResourcePack(img *rl.Image, blockDir, itemDir string, tileSize int32)
 		"gunpowder.png":        {{14, 4}},
 		"bone.png":             {{15, 4}},
 		"arrow.png":            {{10, 5}},
+		"water_bucket.png":     {{11, 5}},
+		"bucket.png":           {{12, 5}},
 	}
 
 	destroyStages := [10]string{
@@ -349,7 +351,7 @@ func stitchResourcePack(img *rl.Image, blockDir, itemDir string, tileSize int32)
 			}
 			tile := loadTile(path)
 			if tile != nil {
-				// Biome Tinting for Grass Top, Grass Tufts, and Leaves
+				// Biome Tinting for Grass Top, Grass Tufts, Leaves, and Water
 				if (strings.Contains(fileName, "grass") && strings.Contains(fileName, "top")) || fileName == "grass.png" {
 					rl.ImageColorTint(tile, rl.NewColor(92, 168, 56, 255)) // Lush Grass Green
 				} else if strings.Contains(fileName, "birch_leaves") {
@@ -358,6 +360,8 @@ func stitchResourcePack(img *rl.Image, blockDir, itemDir string, tileSize int32)
 					rl.ImageColorTint(tile, rl.NewColor(50, 115, 65, 255)) // Spruce Leaf Deep Pine Green
 				} else if strings.Contains(fileName, "leaves") {
 					rl.ImageColorTint(tile, rl.NewColor(58, 140, 32, 255)) // Forest Oak Leaf Green
+				} else if strings.Contains(fileName, "water") {
+					rl.ImageColorTint(tile, rl.NewColor(48, 115, 235, 215)) // Crystal Azure Minecraft Water
 				}
 
 				for _, gridPos := range gridPositions {
@@ -418,23 +422,23 @@ func stitchResourcePack(img *rl.Image, blockDir, itemDir string, tileSize int32)
 			if steveImg.Width >= 64 && steveImg.Height >= 32 {
 				// Steve right arm front: x: 44, y: 20, w: 4, h: 12
 				// Sleeve: top 4x4 of right arm front (x: 44, y: 20, w: 4, h: 4)
-				sleeveCrop := rl.ImageFromImage(steveImg, rl.NewRectangle(44, 20, 4, 4))
-				rl.ImageResizeNN(sleeveCrop, tileSize, tileSize)
+				sleeveCrop := rl.ImageFromImage(*steveImg, rl.NewRectangle(44, 20, 4, 4))
+				rl.ImageResizeNN(&sleeveCrop, tileSize, tileSize)
 				dstX0 := int32(0 * int(tileSize))
 				dstY15 := int32(15 * int(tileSize))
 				rl.ImageDrawRectangle(img, dstX0, dstY15, tileSize, tileSize, rl.Blank)
-				rl.ImageDraw(img, sleeveCrop, rl.NewRectangle(0, 0, float32(tileSize), float32(tileSize)),
+				rl.ImageDraw(img, &sleeveCrop, rl.NewRectangle(0, 0, float32(tileSize), float32(tileSize)),
 					rl.NewRectangle(float32(dstX0), float32(dstY15), float32(tileSize), float32(tileSize)), rl.White)
-				rl.UnloadImage(sleeveCrop)
+				rl.UnloadImage(&sleeveCrop)
 
 				// Skin/Hand: bottom 4x8 of right arm front (x: 44, y: 24, w: 4, h: 8)
-				skinCrop := rl.ImageFromImage(steveImg, rl.NewRectangle(44, 24, 4, 8))
-				rl.ImageResizeNN(skinCrop, tileSize, tileSize)
+				skinCrop := rl.ImageFromImage(*steveImg, rl.NewRectangle(44, 24, 4, 8))
+				rl.ImageResizeNN(&skinCrop, tileSize, tileSize)
 				dstX1 := int32(1 * int(tileSize))
 				rl.ImageDrawRectangle(img, dstX1, dstY15, tileSize, tileSize, rl.Blank)
-				rl.ImageDraw(img, skinCrop, rl.NewRectangle(0, 0, float32(tileSize), float32(tileSize)),
+				rl.ImageDraw(img, &skinCrop, rl.NewRectangle(0, 0, float32(tileSize), float32(tileSize)),
 					rl.NewRectangle(float32(dstX1), float32(dstY15), float32(tileSize), float32(tileSize)), rl.White)
-				rl.UnloadImage(skinCrop)
+				rl.UnloadImage(&skinCrop)
 				count += 2
 			}
 			rl.UnloadImage(steveImg)
@@ -485,7 +489,7 @@ func generateProceduralBase(img *rl.Image) {
 	// Row 2: Lighting, Water & Nature
 	drawTorch(img, 0, 2)
 	drawWater(img, 1, 2)
-	drawWater(img, 2, 2)
+	drawWater(img, 0, 14) // Flowing Water on Row 14
 	drawBirchLogSide(img, 9, 2)
 	drawBirchLogTop(img, 10, 2)
 	drawBirchLeaves(img, 11, 2)
@@ -507,6 +511,10 @@ func generateProceduralBase(img *rl.Image) {
 	drawTool(img, 13, 3, rl.NewColor(230, 230, 230, 255), "pickaxe")
 	drawTool(img, 14, 3, rl.NewColor(230, 230, 230, 255), "axe")
 	drawTool(img, 15, 3, rl.NewColor(95, 240, 250, 255), "pickaxe")
+
+	// Row 5 Items
+	drawWaterBucket(img, 11, 5)
+	drawBucket(img, 12, 5)
 
 	// Row 15: Authentic Steve Character Model & First-Person Arm
 	drawSteveShirt(img, 0, 15)
@@ -968,10 +976,56 @@ func drawTorch(img *rl.Image, col, row int) {
 }
 
 func drawWater(img *rl.Image, col, row int) {
+	c1 := rl.NewColor(44, 115, 235, 215)  // Azure blue
+	c2 := rl.NewColor(36, 100, 220, 215)  // Deep blue
+	c3 := rl.NewColor(75, 145, 250, 215)  // Light wave crest
+	c4 := rl.NewColor(115, 180, 255, 215) // Surface ripple highlight
 	for y := 0; y < 16; y++ {
 		for x := 0; x < 16; x++ {
-			val := uint8(190 + (x*5+y*11)%45)
-			setPixel(img, col, row, x, y, rl.NewColor(35, 110, val, 180))
+			wave := (x*7 + y*13 + (x*y)%5) % 8
+			if wave == 0 {
+				setPixel(img, col, row, x, y, c4)
+			} else if wave <= 2 {
+				setPixel(img, col, row, x, y, c3)
+			} else if wave <= 5 {
+				setPixel(img, col, row, x, y, c1)
+			} else {
+				setPixel(img, col, row, x, y, c2)
+			}
+		}
+	}
+}
+
+func drawBucket(img *rl.Image, col, row int) {
+	iron := rl.NewColor(220, 220, 225, 255)
+	dark := rl.NewColor(140, 140, 145, 255)
+	rim := rl.NewColor(240, 240, 245, 255)
+	for y := 4; y <= 13; y++ {
+		for x := 3; x <= 12; x++ {
+			if y == 4 && (x == 3 || x == 12) {
+				setPixel(img, col, row, x, y, rim)
+			} else if y == 13 && x >= 5 && x <= 10 {
+				setPixel(img, col, row, x, y, iron)
+			} else if (x == 4 || x == 11) && y >= 5 && y <= 12 {
+				setPixel(img, col, row, x, y, dark)
+			} else if (x == 3 || x == 12) && y >= 5 && y <= 7 {
+				setPixel(img, col, row, x, y, iron)
+			}
+		}
+	}
+}
+
+func drawWaterBucket(img *rl.Image, col, row int) {
+	drawBucket(img, col, row)
+	water := rl.NewColor(44, 125, 245, 255)
+	waterLight := rl.NewColor(95, 175, 255, 255)
+	for y := 7; y <= 11; y++ {
+		for x := 5; x <= 10; x++ {
+			if (x+y)%3 == 0 {
+				setPixel(img, col, row, x, y, waterLight)
+			} else {
+				setPixel(img, col, row, x, y, water)
+			}
 		}
 	}
 }

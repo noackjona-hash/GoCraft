@@ -2,12 +2,13 @@ package voxel
 
 import (
 	"math"
+	"sort"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
 const (
-	ChunkRenderRadius = 6 // 13x13 chunk grid (208x208 blocks) rendered entirely on GPU
+	DefaultChunkRenderRadius = 5 // Smooth 11x11 chunk grid (176x176 blocks) on GPU
 )
 
 // MeshBuilder accumulates vertex buffer data to upload into GPU VRAM VBOs
@@ -22,11 +23,11 @@ type MeshBuilder struct {
 
 func newMeshBuilder() *MeshBuilder {
 	return &MeshBuilder{
-		Vertices:  make([]float32, 0, 4096),
-		Texcoords: make([]float32, 0, 2048),
-		Colors:    make([]uint8, 0, 4096),
-		Normals:   make([]float32, 0, 4096),
-		Indices:   make([]uint16, 0, 6144),
+		Vertices:  make([]float32, 0, 32768),
+		Texcoords: make([]float32, 0, 16384),
+		Colors:    make([]uint8, 0, 32768),
+		Normals:   make([]float32, 0, 32768),
+		Indices:   make([]uint16, 0, 49152),
 	}
 }
 
@@ -136,25 +137,55 @@ in vec4 vertexColor;
 in vec3 vertexNormal;
 
 out vec2 fragTexCoord;
-out vec4 fragColor;
+out vec3 fragLight;     // r=skyLight, g=blockLight, b=ao*facet
+out vec3 fragNormal;
+out vec3 fragWorldPos;
+out float fragAlpha;
 out float vertexDistance;
 
 uniform mat4 mvp;
 uniform mat4 matModel;
 uniform vec3 viewPos;
+
+void main() {
+    fragTexCoord = vertexTexCoord;
+    vec4 worldPos = matModel * vec4(vertexPosition, 1.0);
+    fragWorldPos = worldPos.xyz;
+    fragNormal = normalize(mat3(matModel) * vertexNormal);
+    vertexDistance = length(worldPos.xyz - viewPos);
+
+    fragLight = vertexColor.rgb;
+    fragAlpha = vertexColor.a;
+
+    gl_Position = mvp * vec4(vertexPosition, 1.0);
+}
+`
+
+const minecraftFragShader = `#version 330
+in vec2 fragTexCoord;
+in vec3 fragLight;
+in vec3 fragNormal;
+in vec3 fragWorldPos;
+in float fragAlpha;
+in float vertexDistance;
+
+out vec4 finalColor;
+
+uniform sampler2D texture0;
+uniform vec4 colDiffuse;
 uniform vec3 lightDir0;
 uniform float sunIntensity;
+uniform vec3 sunColor;
+uniform vec3 torchColor;
+uniform float time;
+uniform vec3 heldLightPos;
+uniform float heldLightLevel;
+uniform float FogStart;
+uniform float FogEnd;
+uniform vec4 FogColor;
+uniform float isCutout;
 
-// Minecraft light mixing from assets/shaders/include/light.glsl
-vec4 minecraft_mix_light(vec3 lightDir, vec3 normal, vec4 color) {
-    vec3 l0 = normalize(lightDir);
-    vec3 n = normalize(normal);
-    float light0 = max(0.0, dot(l0, n));
-    float sunFacet = min(1.0, light0 * sunIntensity * 0.15 + 0.85);
-    return vec4(color.rgb * sunFacet, color.a);
-}
-
-// ACES Filmic Tone Mapping for "Raytracing" aesthetics
+// ACES Filmic Tone Mapping for authentic cinematic depth
 vec3 ACESFilm(vec3 x) {
     float a = 2.51;
     float b = 0.03;
@@ -164,34 +195,7 @@ vec3 ACESFilm(vec3 x) {
     return clamp((x*(a*x+b))/(x*(c*x+d)+e), 0.0, 1.0);
 }
 
-void main() {
-    fragTexCoord = vertexTexCoord;
-    vec4 worldPos = matModel * vec4(vertexPosition, 1.0);
-    vertexDistance = length(worldPos.xyz - viewPos);
-
-    vec4 mixedColor = minecraft_mix_light(lightDir0, vertexNormal, vertexColor);
-    mixedColor.rgb = ACESFilm(mixedColor.rgb * 1.2);
-    fragColor = mixedColor;
-    
-    gl_Position = mvp * vec4(vertexPosition, 1.0);
-}
-`
-
-const minecraftFragShader = `#version 330
-in vec2 fragTexCoord;
-in vec4 fragColor;
-in float vertexDistance;
-
-out vec4 finalColor;
-
-uniform sampler2D texture0;
-uniform vec4 colDiffuse;
-uniform float FogStart;
-uniform float FogEnd;
-uniform vec4 FogColor;
-uniform float isCutout;
-
-// Direct implementation of assets/shaders/include/fog.glsl
+// Fog implementation from assets/shaders/include/fog.glsl
 vec4 linear_fog(vec4 inColor, float dist, float fogStart, float fogEnd, vec4 fogCol) {
     if (dist <= fogStart) {
         return inColor;
@@ -204,8 +208,43 @@ void main() {
     vec4 texelColor = texture(texture0, fragTexCoord);
     if (isCutout > 0.5 && texelColor.a < 0.1) discard;
 
-    vec4 color = texelColor * fragColor * colDiffuse;
-    finalColor = linear_fog(color, vertexDistance, FogStart, FogEnd, FogColor);
+    float skyLight = fragLight.r;
+    float blockLight = fragLight.g;
+    float aoAndFacet = fragLight.b;
+
+    // Organic flame flicker
+    float flicker = 1.0 + sin(time * 7.5 + fragWorldPos.x * 2.3) * 0.025 + cos(time * 14.0 + fragWorldPos.z * 1.7) * 0.018;
+
+    // Dynamic handheld torch lighting (OptiFine style!)
+    float heldDist = length(fragWorldPos - heldLightPos);
+    if (heldLightLevel > 0.0 && heldDist < 13.0) {
+        float hLight = clamp((13.0 - heldDist) / 13.0, 0.0, 1.0) * heldLightLevel;
+        hLight = pow(hLight, 1.4);
+        blockLight = max(blockLight, hLight);
+    }
+
+    // Authentic non-linear Minecraft light curves
+    float skyCurve = pow(skyLight, 1.4) * sunIntensity;
+    vec3 skyContrib = sunColor * skyCurve;
+
+    float blockCurve = pow(blockLight, 1.45) * flicker;
+    vec3 torchContrib = torchColor * blockCurve;
+
+    // Subtle cave ambient (pitch black in deep caves, no grey washout!)
+    vec3 caveAmbient = vec3(0.028, 0.032, 0.042);
+
+    // Combine light contributions
+    vec3 totalLight = (max(skyContrib, torchContrib) + caveAmbient + skyContrib * 0.10 + torchContrib * 0.10) * aoAndFacet;
+
+    // Directional sunlight bounce on top/sloped faces
+    vec3 l0 = normalize(lightDir0);
+    float sunFacing = max(0.0, dot(fragNormal, l0));
+    totalLight += sunColor * sunFacing * sunIntensity * 0.18 * skyLight;
+
+    vec3 tonemapped = ACESFilm(totalLight * 1.18);
+    vec4 litColor = texelColor * vec4(tonemapped, fragAlpha) * colDiffuse;
+
+    finalColor = linear_fog(litColor, vertexDistance, FogStart, FogEnd, FogColor);
 }
 `
 
@@ -219,23 +258,34 @@ type ChunkManager struct {
 	CutoutMB       *MeshBuilder
 	WaterMB        *MeshBuilder
 	IdentityMat    rl.Matrix
+	RenderRadius   int
 
 	// Shader Uniform Locations
-	Shader             rl.Shader
-	CutoutShader       rl.Shader
-	ViewPosLoc         int32
-	LightDirLoc        int32
-	SunIntensityLoc    int32
-	FogStartLoc        int32
-	FogEndLoc          int32
-	FogColorLoc        int32
-	CutoutViewPosLoc   int32
-	CutoutLightDirLoc  int32
-	CutoutSunIntLoc    int32
-	CutoutFogStartLoc  int32
-	CutoutFogEndLoc    int32
-	CutoutFogColorLoc  int32
-	CutoutFlagLoc      int32
+	Shader                 rl.Shader
+	CutoutShader           rl.Shader
+	ViewPosLoc             int32
+	LightDirLoc            int32
+	SunIntensityLoc        int32
+	SunColorLoc            int32
+	TorchColorLoc          int32
+	TimeLoc                int32
+	HeldLightPosLoc        int32
+	HeldLightLevelLoc      int32
+	FogStartLoc            int32
+	FogEndLoc              int32
+	FogColorLoc            int32
+	CutoutViewPosLoc       int32
+	CutoutLightDirLoc      int32
+	CutoutSunIntLoc        int32
+	CutoutSunColorLoc      int32
+	CutoutTorchColorLoc    int32
+	CutoutTimeLoc          int32
+	CutoutHeldLightPosLoc  int32
+	CutoutHeldLightLevelLoc int32
+	CutoutFogStartLoc      int32
+	CutoutFogEndLoc        int32
+	CutoutFogColorLoc      int32
+	CutoutFlagLoc          int32
 }
 
 // NewChunkManager creates the infinite chunk streaming manager with authentic Minecraft GPU shaders
@@ -245,6 +295,11 @@ func NewChunkManager(w *VoxelWorld, atlas *TextureAtlas) *ChunkManager {
 	viewPosLoc := rl.GetShaderLocation(opaqueShader, "viewPos")
 	lightDirLoc := rl.GetShaderLocation(opaqueShader, "lightDir0")
 	sunIntLoc := rl.GetShaderLocation(opaqueShader, "sunIntensity")
+	sunColorLoc := rl.GetShaderLocation(opaqueShader, "sunColor")
+	torchColorLoc := rl.GetShaderLocation(opaqueShader, "torchColor")
+	timeLoc := rl.GetShaderLocation(opaqueShader, "time")
+	heldLightPosLoc := rl.GetShaderLocation(opaqueShader, "heldLightPos")
+	heldLightLevelLoc := rl.GetShaderLocation(opaqueShader, "heldLightLevel")
 	fogStartLoc := rl.GetShaderLocation(opaqueShader, "FogStart")
 	fogEndLoc := rl.GetShaderLocation(opaqueShader, "FogEnd")
 	fogColorLoc := rl.GetShaderLocation(opaqueShader, "FogColor")
@@ -258,6 +313,11 @@ func NewChunkManager(w *VoxelWorld, atlas *TextureAtlas) *ChunkManager {
 	cViewPosLoc := rl.GetShaderLocation(cutoutShader, "viewPos")
 	cLightDirLoc := rl.GetShaderLocation(cutoutShader, "lightDir0")
 	cSunIntLoc := rl.GetShaderLocation(cutoutShader, "sunIntensity")
+	cSunColorLoc := rl.GetShaderLocation(cutoutShader, "sunColor")
+	cTorchColorLoc := rl.GetShaderLocation(cutoutShader, "torchColor")
+	cTimeLoc := rl.GetShaderLocation(cutoutShader, "time")
+	cHeldLightPosLoc := rl.GetShaderLocation(cutoutShader, "heldLightPos")
+	cHeldLightLevelLoc := rl.GetShaderLocation(cutoutShader, "heldLightLevel")
 	cFogStartLoc := rl.GetShaderLocation(cutoutShader, "FogStart")
 	cFogEndLoc := rl.GetShaderLocation(cutoutShader, "FogEnd")
 	cFogColorLoc := rl.GetShaderLocation(cutoutShader, "FogColor")
@@ -281,46 +341,99 @@ func NewChunkManager(w *VoxelWorld, atlas *TextureAtlas) *ChunkManager {
 		WaterMB:        newMeshBuilder(),
 		IdentityMat:    rl.MatrixIdentity(),
 
-		Shader:            opaqueShader,
-		CutoutShader:      cutoutShader,
-		ViewPosLoc:        viewPosLoc,
-		LightDirLoc:       lightDirLoc,
-		SunIntensityLoc:   sunIntLoc,
-		FogStartLoc:       fogStartLoc,
-		FogEndLoc:         fogEndLoc,
-		FogColorLoc:       fogColorLoc,
-		CutoutViewPosLoc:  cViewPosLoc,
-		CutoutLightDirLoc: cLightDirLoc,
-		CutoutSunIntLoc:   cSunIntLoc,
-		CutoutFogStartLoc: cFogStartLoc,
-		CutoutFogEndLoc:   cFogEndLoc,
-		CutoutFogColorLoc: cFogColorLoc,
-		CutoutFlagLoc:     cCutoutFlagLoc,
+		Shader:                 opaqueShader,
+		CutoutShader:           cutoutShader,
+		ViewPosLoc:             viewPosLoc,
+		LightDirLoc:            lightDirLoc,
+		SunIntensityLoc:        sunIntLoc,
+		SunColorLoc:            sunColorLoc,
+		TorchColorLoc:          torchColorLoc,
+		TimeLoc:                timeLoc,
+		HeldLightPosLoc:        heldLightPosLoc,
+		HeldLightLevelLoc:      heldLightLevelLoc,
+		FogStartLoc:            fogStartLoc,
+		FogEndLoc:              fogEndLoc,
+		FogColorLoc:            fogColorLoc,
+		CutoutViewPosLoc:       cViewPosLoc,
+		CutoutLightDirLoc:      cLightDirLoc,
+		CutoutSunIntLoc:        cSunIntLoc,
+		CutoutSunColorLoc:      cSunColorLoc,
+		CutoutTorchColorLoc:    cTorchColorLoc,
+		CutoutTimeLoc:          cTimeLoc,
+		CutoutHeldLightPosLoc:  cHeldLightPosLoc,
+		CutoutHeldLightLevelLoc: cHeldLightLevelLoc,
+		CutoutFogStartLoc:      cFogStartLoc,
+		CutoutFogEndLoc:        cFogEndLoc,
+		CutoutFogColorLoc:      cFogColorLoc,
+		CutoutFlagLoc:          cCutoutFlagLoc,
+		RenderRadius:           DefaultChunkRenderRadius,
 	}
 
-	// Set initial fog parameters
-	cm.UpdateFogAndSky(rl.NewColor(135, 206, 235, 255), false, rl.Vector3{}, 0.2, 0.8)
+	// Set initial fog & lighting parameters
+	cm.UpdateFogAndSky(rl.NewColor(135, 206, 235, 255), false, rl.Vector3{}, 0.2, 0.8, 0, rl.Vector3{}, 0)
 
 	return cm
 }
 
-// UpdateFogAndSky passes dynamic sky color, camera viewPos, sunlight direction and fog distances into the GPU chunk shaders
-func (cm *ChunkManager) UpdateFogAndSky(skyCol rl.Color, isUnderwater bool, cameraPos rl.Vector3, sunAngle, sunHeight float32) {
+// CycleRenderRadius cycles render distance between 3, 4, 5, 6 chunks
+func (cm *ChunkManager) CycleRenderRadius() int {
+	cm.RenderRadius++
+	if cm.RenderRadius > 6 {
+		cm.RenderRadius = 3
+	}
+	return cm.RenderRadius
+}
+
+// UpdateFogAndSky passes dynamic sky color, sunlight direction, torch light, time, and handheld light into GPU chunk shaders
+func (cm *ChunkManager) UpdateFogAndSky(skyCol rl.Color, isUnderwater bool, cameraPos rl.Vector3, sunAngle, sunHeight float32, time float32, heldLightPos rl.Vector3, heldLightLevel float32) {
 	fogR := float32(skyCol.R) / 255.0
 	fogG := float32(skyCol.G) / 255.0
 	fogB := float32(skyCol.B) / 255.0
 
-	near := float32(ChunkRenderRadius*ChunkSize) * 0.55
-	far := float32(ChunkRenderRadius*ChunkSize) * 0.95
+	radius := cm.RenderRadius
+	if radius <= 0 {
+		radius = DefaultChunkRenderRadius
+	}
+
+	near := float32(radius*ChunkSize) * 0.55
+	far := float32(radius*ChunkSize) * 0.95
 	if isUnderwater {
 		near = 2.0
 		far = 28.0
 	}
 
-	sunIntensity := float32(math.Max(0.08, float64((sunHeight+0.3)/1.3)))
+	// Realistic dynamic sunlight intensity: bright day (1.0) -> sunset (0.45) -> night (0.04)
+	sunIntensity := float32(math.Max(0.04, float64((sunHeight+0.25)/1.25)))
 	sunDirX := float32(math.Cos(float64(sunAngle)))
 	sunDirY := sunHeight
 	sunDirZ := float32(0.0)
+
+	// Dynamic sunlight color calculation
+	var sunColR, sunColG, sunColB float32
+	if sunHeight > 0.25 {
+		// Daylight: Crisp warm sun
+		sunColR = 1.00
+		sunColG = 0.98
+		sunColB = 0.90
+	} else if sunHeight > -0.10 {
+		// Sunset / Sunrise: Dramatic golden-orange hour
+		t := (sunHeight + 0.10) / 0.35 // 0 to 1
+		sunColR = 1.00
+		sunColG = 0.35 + t*0.63
+		sunColB = 0.12 + t*0.78
+	} else {
+		// Night: Pale moonlight
+		sunColR = 0.12
+		sunColG = 0.18
+		sunColB = 0.32
+	}
+
+	// Warm amber torchlight
+	torchCol := []float32{1.00, 0.65, 0.25}
+	sunCol := []float32{sunColR, sunColG, sunColB}
+	timeVal := []float32{time}
+	heldPos := []float32{heldLightPos.X, heldLightPos.Y, heldLightPos.Z}
+	heldLevel := []float32{heldLightLevel}
 
 	fogCol := []float32{fogR, fogG, fogB, 1.0}
 	nearVal := []float32{near}
@@ -333,6 +446,11 @@ func (cm *ChunkManager) UpdateFogAndSky(skyCol rl.Color, isUnderwater bool, came
 	rl.SetShaderValue(cm.Shader, cm.ViewPosLoc, viewPos, rl.ShaderUniformVec3)
 	rl.SetShaderValue(cm.Shader, cm.LightDirLoc, lightDir, rl.ShaderUniformVec3)
 	rl.SetShaderValue(cm.Shader, cm.SunIntensityLoc, sunInt, rl.ShaderUniformFloat)
+	rl.SetShaderValue(cm.Shader, cm.SunColorLoc, sunCol, rl.ShaderUniformVec3)
+	rl.SetShaderValue(cm.Shader, cm.TorchColorLoc, torchCol, rl.ShaderUniformVec3)
+	rl.SetShaderValue(cm.Shader, cm.TimeLoc, timeVal, rl.ShaderUniformFloat)
+	rl.SetShaderValue(cm.Shader, cm.HeldLightPosLoc, heldPos, rl.ShaderUniformVec3)
+	rl.SetShaderValue(cm.Shader, cm.HeldLightLevelLoc, heldLevel, rl.ShaderUniformFloat)
 	rl.SetShaderValue(cm.Shader, cm.FogStartLoc, nearVal, rl.ShaderUniformFloat)
 	rl.SetShaderValue(cm.Shader, cm.FogEndLoc, farVal, rl.ShaderUniformFloat)
 	rl.SetShaderValue(cm.Shader, cm.FogColorLoc, fogCol, rl.ShaderUniformVec4)
@@ -341,6 +459,11 @@ func (cm *ChunkManager) UpdateFogAndSky(skyCol rl.Color, isUnderwater bool, came
 	rl.SetShaderValue(cm.CutoutShader, cm.CutoutViewPosLoc, viewPos, rl.ShaderUniformVec3)
 	rl.SetShaderValue(cm.CutoutShader, cm.CutoutLightDirLoc, lightDir, rl.ShaderUniformVec3)
 	rl.SetShaderValue(cm.CutoutShader, cm.CutoutSunIntLoc, sunInt, rl.ShaderUniformFloat)
+	rl.SetShaderValue(cm.CutoutShader, cm.CutoutSunColorLoc, sunCol, rl.ShaderUniformVec3)
+	rl.SetShaderValue(cm.CutoutShader, cm.CutoutTorchColorLoc, torchCol, rl.ShaderUniformVec3)
+	rl.SetShaderValue(cm.CutoutShader, cm.CutoutTimeLoc, timeVal, rl.ShaderUniformFloat)
+	rl.SetShaderValue(cm.CutoutShader, cm.CutoutHeldLightPosLoc, heldPos, rl.ShaderUniformVec3)
+	rl.SetShaderValue(cm.CutoutShader, cm.CutoutHeldLightLevelLoc, heldLevel, rl.ShaderUniformFloat)
 	rl.SetShaderValue(cm.CutoutShader, cm.CutoutFogStartLoc, nearVal, rl.ShaderUniformFloat)
 	rl.SetShaderValue(cm.CutoutShader, cm.CutoutFogEndLoc, farVal, rl.ShaderUniformFloat)
 	rl.SetShaderValue(cm.CutoutShader, cm.CutoutFogColorLoc, fogCol, rl.ShaderUniformVec4)
@@ -351,12 +474,20 @@ func (cm *ChunkManager) UpdatePlayerPos(playerPos rl.Vector3) {
 	pcx := int(math.Floor(float64(playerPos.X))) >> 4
 	pcz := int(math.Floor(float64(playerPos.Z))) >> 4
 
-	// Rate-limit dirty chunk rebuilds to avoid lag spikes when moving
-	rebuildsThisFrame := 0
-	const maxRebuildsPerFrame = 2
+	radius := cm.RenderRadius
+	if radius <= 0 {
+		radius = DefaultChunkRenderRadius
+	}
 
-	for dx := -ChunkRenderRadius; dx <= ChunkRenderRadius; dx++ {
-		for dz := -ChunkRenderRadius; dz <= ChunkRenderRadius; dz++ {
+	// 1. Discover all needed chunks and queue dirty ones
+	type chunkDist struct {
+		chunk  *Chunk
+		distSq int
+	}
+	var dirtyList []chunkDist
+
+	for dx := -radius; dx <= radius; dx++ {
+		for dz := -radius; dz <= radius; dz++ {
 			coord := ChunkCoord{X: pcx + dx, Z: pcz + dz}
 			chunk, exists := cm.Chunks[coord]
 			if !exists {
@@ -367,20 +498,34 @@ func (cm *ChunkManager) UpdatePlayerPos(playerPos rl.Vector3) {
 					CenterZ: float32(coord.Z*ChunkSize + ChunkSize/2),
 				}
 				cm.Chunks[coord] = chunk
-				cm.RebuildChunkMeshes(chunk)
-				rebuildsThisFrame++
-			} else if chunk.IsDirty {
-				if rebuildsThisFrame < maxRebuildsPerFrame {
-					cm.RebuildChunkMeshes(chunk)
-					chunk.IsDirty = false
-					rebuildsThisFrame++
-				}
+			}
+
+			if chunk.IsDirty {
+				distSq := dx*dx + dz*dz
+				dirtyList = append(dirtyList, chunkDist{chunk: chunk, distSq: distSq})
 			}
 		}
 	}
 
-	// Unload chunks far outside render radius to save memory
-	unloadRadius := ChunkRenderRadius + 3
+	// 2. Sort dirty chunks by distance to player (closest chunks rebuilt first!)
+	sort.Slice(dirtyList, func(i, j int) bool {
+		return dirtyList[i].distSq < dirtyList[j].distSq
+	})
+
+	// 3. Rebuild at most 2 chunks per frame to guarantee perfectly smooth 60-144+ FPS
+	rebuilt := 0
+	maxRebuilds := 2
+	for _, item := range dirtyList {
+		if rebuilt >= maxRebuilds {
+			break
+		}
+		cm.RebuildChunkMeshes(item.chunk)
+		item.chunk.IsDirty = false
+		rebuilt++
+	}
+
+	// 4. Unload chunks far outside render radius to save GPU memory
+	unloadRadius := radius + 2
 	for coord, chunk := range cm.Chunks {
 		dx := coord.X - pcx
 		dz := coord.Z - pcz
@@ -391,17 +536,35 @@ func (cm *ChunkManager) UpdatePlayerPos(playerPos rl.Vector3) {
 	}
 }
 
-// MarkBlockDirty flags the chunk at (x, z) for rebuild
+// MarkBlockDirty flags the chunk at (x, z) for rebuild (and neighbors only if on border)
 func (cm *ChunkManager) MarkBlockDirty(x, z int) {
 	cx := x >> 4
 	cz := z >> 4
+	lx := x & 15
+	lz := z & 15
 
-	for dx := -1; dx <= 1; dx++ {
-		for dz := -1; dz <= 1; dz++ {
-			coord := ChunkCoord{X: cx + dx, Z: cz + dz}
-			if chunk, exists := cm.Chunks[coord]; exists {
-				chunk.IsDirty = true
-			}
+	if chunk, exists := cm.Chunks[ChunkCoord{X: cx, Z: cz}]; exists {
+		chunk.IsDirty = true
+	}
+
+	// Only mark neighbors if the block is on the outer boundary
+	if lx == 0 {
+		if chunk, exists := cm.Chunks[ChunkCoord{X: cx - 1, Z: cz}]; exists {
+			chunk.IsDirty = true
+		}
+	} else if lx == 15 {
+		if chunk, exists := cm.Chunks[ChunkCoord{X: cx + 1, Z: cz}]; exists {
+			chunk.IsDirty = true
+		}
+	}
+
+	if lz == 0 {
+		if chunk, exists := cm.Chunks[ChunkCoord{X: cx, Z: cz - 1}]; exists {
+			chunk.IsDirty = true
+		}
+	} else if lz == 15 {
+		if chunk, exists := cm.Chunks[ChunkCoord{X: cx, Z: cz + 1}]; exists {
+			chunk.IsDirty = true
 		}
 	}
 }
@@ -425,42 +588,12 @@ func unloadChunkGPUMeshes(c *Chunk) {
 	}
 }
 
-// calculateMinecraftVertexColor computes authentic Minecraft vertex colors combining SkyLight, TorchLight, AO, and face shading
-func calculateMinecraftVertexColor(skyLight, torchLight, ao, faceMult float32) rl.Color {
-	// Base ambient in deep caves
-	ambient := float32(0.12)
-
-	// Sky light color: Neutral cool daylight
-	skyR := skyLight * 0.96
-	skyG := skyLight * 0.98
-	skyB := skyLight * 1.00
-
-	// Torch light color: Warm golden orange
-	torchR := torchLight * 1.25
-	torchG := torchLight * 0.95
-	torchB := torchLight * 0.55
-
-	// Smooth gentle ambient occlusion curve
-	softAO := 0.75 + ao*0.25
-
-	// Soft face shading curve
-	softFace := 0.70 + faceMult*0.30
-
-	r := (skyR + torchR + ambient) * softFace * softAO
-	g := (skyG + torchG + ambient) * softFace * softAO
-	b := (skyB + torchB + ambient) * softFace * softAO
-
-	if r > 1.0 {
-		r = 1.0
-	}
-	if g > 1.0 {
-		g = 1.0
-	}
-	if b > 1.0 {
-		b = 1.0
-	}
-
-	return rl.NewColor(uint8(r*255.0), uint8(g*255.0), uint8(b*255.0), 255)
+// calculateMinecraftVertexColor encodes SkyLight, BlockLight, AO, and Face Shading into vertex attributes
+func calculateMinecraftVertexColor(skyLight, torchLight, ao, faceMult float32, alpha uint8) rl.Color {
+	r := uint8(skyLight * 255.0)
+	g := uint8(torchLight * 255.0)
+	b := uint8(ao * faceMult * 255.0)
+	return rl.NewColor(r, g, b, alpha)
 }
 
 // RebuildChunkMeshes compiles chunk voxels into optimized GPU VBOs
@@ -496,9 +629,15 @@ func (cm *ChunkManager) RebuildChunkMeshes(c *Chunk) {
 				z0 := float32(z)
 				z1 := float32(z + 1)
 
+				isWaterBlock := IsWater(bType)
+				blockAlpha := uint8(255)
+				if isWaterBlock {
+					blockAlpha = 205
+				}
+
 				// Determine destination MeshBuilder
 				var mb *MeshBuilder
-				if bType == BlockWater {
+				if isWaterBlock {
 					mb = cm.WaterMB
 				} else if IsLeaf(bType) || bType == BlockGlass || bType == BlockTorch || IsPlant(bType) {
 					mb = cm.CutoutMB
@@ -566,7 +705,7 @@ func (cm *ChunkManager) RebuildChunkMeshes(c *Chunk) {
 				if IsPlant(bType) {
 					uMin, vMin, uMax, vMax := GetBlockTextureUVs(bType, FaceNorth)
 					skyLight, torchLight := lightMap.GetLight(x, y, z)
-					pCol := calculateMinecraftVertexColor(skyLight, torchLight, 1.0, 0.92)
+					pCol := calculateMinecraftVertexColor(skyLight, torchLight, 1.0, 0.92, 255)
 					plantNorm := rl.Vector3{X: 0, Y: 1, Z: 0}
 
 					cx := x0 + 0.5
@@ -614,16 +753,23 @@ func (cm *ChunkManager) RebuildChunkMeshes(c *Chunk) {
 				westBlock := w.GetBlock(x-1, y, z)
 				eastBlock := w.GetBlock(x+1, y, z)
 
+				if isWaterBlock {
+					// Liquid surface depression: still and flowing water top is 0.88 high
+					if !IsWater(topBlock) {
+						y1 = y0 + 0.88
+					}
+				}
+
 				var topAir, bottomAir, northAir, southAir, westAir, eastAir bool
 
-				if bType == BlockWater {
+				if isWaterBlock {
 					// Water faces only rendered if neighbor is not water
-					topAir = topBlock != BlockWater
-					bottomAir = y > 0 && bottomBlock != BlockWater
-					northAir = northBlock != BlockWater
-					southAir = southBlock != BlockWater
-					westAir = westBlock != BlockWater
-					eastAir = eastBlock != BlockWater
+					topAir = !IsWater(topBlock)
+					bottomAir = y > 0 && !IsWater(bottomBlock)
+					northAir = !IsWater(northBlock)
+					southAir = !IsWater(southBlock)
+					westAir = !IsWater(westBlock)
+					eastAir = !IsWater(eastBlock)
 				} else if bType == BlockGlass {
 					topAir = topBlock != BlockGlass && (y == WorldHeight-1 || BlockRegistry[topBlock].IsTransparent)
 					bottomAir = bottomBlock != BlockGlass && (y > 0 && BlockRegistry[bottomBlock].IsTransparent)
@@ -663,10 +809,10 @@ func (cm *ChunkManager) RebuildChunkMeshes(c *Chunk) {
 					ao2 := CalculateVertexAO(w.IsSolid(x+1, y+1, z), w.IsSolid(x, y+1, z-1), w.IsSolid(x+1, y+1, z-1))
 					ao3 := CalculateVertexAO(w.IsSolid(x-1, y+1, z), w.IsSolid(x, y+1, z-1), w.IsSolid(x-1, y+1, z-1))
 
-					c0 := calculateMinecraftVertexColor(skyLight, torchLight, ao0, faceMult)
-					c1 := calculateMinecraftVertexColor(skyLight, torchLight, ao1, faceMult)
-					c2 := calculateMinecraftVertexColor(skyLight, torchLight, ao2, faceMult)
-					c3 := calculateMinecraftVertexColor(skyLight, torchLight, ao3, faceMult)
+					c0 := calculateMinecraftVertexColor(skyLight, torchLight, ao0, faceMult, blockAlpha)
+					c1 := calculateMinecraftVertexColor(skyLight, torchLight, ao1, faceMult, blockAlpha)
+					c2 := calculateMinecraftVertexColor(skyLight, torchLight, ao2, faceMult, blockAlpha)
+					c3 := calculateMinecraftVertexColor(skyLight, torchLight, ao3, faceMult, blockAlpha)
 
 					p0 := rl.Vector3{X: x0, Y: y1, Z: z1}
 					p1 := rl.Vector3{X: x1, Y: y1, Z: z1}
@@ -688,10 +834,10 @@ func (cm *ChunkManager) RebuildChunkMeshes(c *Chunk) {
 					ao2 := CalculateVertexAO(w.IsSolid(x+1, y-1, z), w.IsSolid(x, y-1, z+1), w.IsSolid(x+1, y-1, z+1))
 					ao3 := CalculateVertexAO(w.IsSolid(x-1, y-1, z), w.IsSolid(x, y-1, z+1), w.IsSolid(x-1, y-1, z+1))
 
-					c0 := calculateMinecraftVertexColor(skyLight, torchLight, ao0, faceMult)
-					c1 := calculateMinecraftVertexColor(skyLight, torchLight, ao1, faceMult)
-					c2 := calculateMinecraftVertexColor(skyLight, torchLight, ao2, faceMult)
-					c3 := calculateMinecraftVertexColor(skyLight, torchLight, ao3, faceMult)
+					c0 := calculateMinecraftVertexColor(skyLight, torchLight, ao0, faceMult, blockAlpha)
+					c1 := calculateMinecraftVertexColor(skyLight, torchLight, ao1, faceMult, blockAlpha)
+					c2 := calculateMinecraftVertexColor(skyLight, torchLight, ao2, faceMult, blockAlpha)
+					c3 := calculateMinecraftVertexColor(skyLight, torchLight, ao3, faceMult, blockAlpha)
 
 					p0 := rl.Vector3{X: x0, Y: y0, Z: z0}
 					p1 := rl.Vector3{X: x1, Y: y0, Z: z0}
@@ -713,10 +859,10 @@ func (cm *ChunkManager) RebuildChunkMeshes(c *Chunk) {
 					ao2 := CalculateVertexAO(w.IsSolid(x-1, y, z-1), w.IsSolid(x, y+1, z-1), w.IsSolid(x-1, y+1, z-1))
 					ao3 := CalculateVertexAO(w.IsSolid(x+1, y, z-1), w.IsSolid(x, y+1, z-1), w.IsSolid(x+1, y+1, z-1))
 
-					c0 := calculateMinecraftVertexColor(skyLight, torchLight, ao0, faceMult)
-					c1 := calculateMinecraftVertexColor(skyLight, torchLight, ao1, faceMult)
-					c2 := calculateMinecraftVertexColor(skyLight, torchLight, ao2, faceMult)
-					c3 := calculateMinecraftVertexColor(skyLight, torchLight, ao3, faceMult)
+					c0 := calculateMinecraftVertexColor(skyLight, torchLight, ao0, faceMult, blockAlpha)
+					c1 := calculateMinecraftVertexColor(skyLight, torchLight, ao1, faceMult, blockAlpha)
+					c2 := calculateMinecraftVertexColor(skyLight, torchLight, ao2, faceMult, blockAlpha)
+					c3 := calculateMinecraftVertexColor(skyLight, torchLight, ao3, faceMult, blockAlpha)
 
 					p0 := rl.Vector3{X: x1, Y: y0, Z: z0}
 					p1 := rl.Vector3{X: x0, Y: y0, Z: z0}
@@ -738,10 +884,10 @@ func (cm *ChunkManager) RebuildChunkMeshes(c *Chunk) {
 					ao2 := CalculateVertexAO(w.IsSolid(x+1, y, z+1), w.IsSolid(x, y+1, z+1), w.IsSolid(x+1, y+1, z+1))
 					ao3 := CalculateVertexAO(w.IsSolid(x-1, y, z+1), w.IsSolid(x, y+1, z+1), w.IsSolid(x-1, y+1, z+1))
 
-					c0 := calculateMinecraftVertexColor(skyLight, torchLight, ao0, faceMult)
-					c1 := calculateMinecraftVertexColor(skyLight, torchLight, ao1, faceMult)
-					c2 := calculateMinecraftVertexColor(skyLight, torchLight, ao2, faceMult)
-					c3 := calculateMinecraftVertexColor(skyLight, torchLight, ao3, faceMult)
+					c0 := calculateMinecraftVertexColor(skyLight, torchLight, ao0, faceMult, blockAlpha)
+					c1 := calculateMinecraftVertexColor(skyLight, torchLight, ao1, faceMult, blockAlpha)
+					c2 := calculateMinecraftVertexColor(skyLight, torchLight, ao2, faceMult, blockAlpha)
+					c3 := calculateMinecraftVertexColor(skyLight, torchLight, ao3, faceMult, blockAlpha)
 
 					p0 := rl.Vector3{X: x0, Y: y0, Z: z1}
 					p1 := rl.Vector3{X: x1, Y: y0, Z: z1}
@@ -763,10 +909,10 @@ func (cm *ChunkManager) RebuildChunkMeshes(c *Chunk) {
 					ao2 := CalculateVertexAO(w.IsSolid(x-1, y, z+1), w.IsSolid(x-1, y+1, z), w.IsSolid(x-1, y+1, z+1))
 					ao3 := CalculateVertexAO(w.IsSolid(x-1, y, z-1), w.IsSolid(x-1, y+1, z), w.IsSolid(x-1, y+1, z-1))
 
-					c0 := calculateMinecraftVertexColor(skyLight, torchLight, ao0, faceMult)
-					c1 := calculateMinecraftVertexColor(skyLight, torchLight, ao1, faceMult)
-					c2 := calculateMinecraftVertexColor(skyLight, torchLight, ao2, faceMult)
-					c3 := calculateMinecraftVertexColor(skyLight, torchLight, ao3, faceMult)
+					c0 := calculateMinecraftVertexColor(skyLight, torchLight, ao0, faceMult, blockAlpha)
+					c1 := calculateMinecraftVertexColor(skyLight, torchLight, ao1, faceMult, blockAlpha)
+					c2 := calculateMinecraftVertexColor(skyLight, torchLight, ao2, faceMult, blockAlpha)
+					c3 := calculateMinecraftVertexColor(skyLight, torchLight, ao3, faceMult, blockAlpha)
 
 					p0 := rl.Vector3{X: x0, Y: y0, Z: z0}
 					p1 := rl.Vector3{X: x0, Y: y0, Z: z1}
@@ -788,10 +934,10 @@ func (cm *ChunkManager) RebuildChunkMeshes(c *Chunk) {
 					ao2 := CalculateVertexAO(w.IsSolid(x+1, y, z-1), w.IsSolid(x+1, y+1, z), w.IsSolid(x+1, y+1, z-1))
 					ao3 := CalculateVertexAO(w.IsSolid(x+1, y, z+1), w.IsSolid(x+1, y+1, z), w.IsSolid(x+1, y+1, z+1))
 
-					c0 := calculateMinecraftVertexColor(skyLight, torchLight, ao0, faceMult)
-					c1 := calculateMinecraftVertexColor(skyLight, torchLight, ao1, faceMult)
-					c2 := calculateMinecraftVertexColor(skyLight, torchLight, ao2, faceMult)
-					c3 := calculateMinecraftVertexColor(skyLight, torchLight, ao3, faceMult)
+					c0 := calculateMinecraftVertexColor(skyLight, torchLight, ao0, faceMult, blockAlpha)
+					c1 := calculateMinecraftVertexColor(skyLight, torchLight, ao1, faceMult, blockAlpha)
+					c2 := calculateMinecraftVertexColor(skyLight, torchLight, ao2, faceMult, blockAlpha)
+					c3 := calculateMinecraftVertexColor(skyLight, torchLight, ao3, faceMult, blockAlpha)
 
 					p0 := rl.Vector3{X: x1, Y: y0, Z: z1}
 					p1 := rl.Vector3{X: x1, Y: y0, Z: z0}
@@ -825,14 +971,24 @@ func (cm *ChunkManager) Render3D(cameraPos rl.Vector3, forwardDir rl.Vector3) {
 	pcx := int(math.Floor(float64(cameraPos.X))) >> 4
 	pcz := int(math.Floor(float64(cameraPos.Z))) >> 4
 
-	visibleChunks := make([]*Chunk, 0, (ChunkRenderRadius*2+1)*(ChunkRenderRadius*2+1))
+	radius := cm.RenderRadius
+	if radius <= 0 {
+		radius = DefaultChunkRenderRadius
+	}
+
+	visibleChunks := make([]*Chunk, 0, (radius*2+1)*(radius*2+1))
 
 	// Frustum & Distance Culling
-	for dx := -ChunkRenderRadius; dx <= ChunkRenderRadius; dx++ {
-		for dz := -ChunkRenderRadius; dz <= ChunkRenderRadius; dz++ {
+	for dx := -radius; dx <= radius; dx++ {
+		for dz := -radius; dz <= radius; dz++ {
 			coord := ChunkCoord{X: pcx + dx, Z: pcz + dz}
 			chunk, exists := cm.Chunks[coord]
 			if !exists {
+				continue
+			}
+
+			// Skip completely empty chunks
+			if !chunk.HasOpaque && !chunk.HasCutout && !chunk.HasWater {
 				continue
 			}
 
@@ -845,7 +1001,7 @@ func (cm *ChunkManager) Render3D(cameraPos rl.Vector3, forwardDir rl.Vector3) {
 					dirX := toChunkX / dist
 					dirZ := toChunkZ / dist
 					dot := dirX*forwardDir.X + dirZ*forwardDir.Z
-					if dot < -0.45 { // Behind player camera
+					if dot < -0.15 { // Behind or outside player FOV cone
 						continue
 					}
 				}
@@ -872,7 +1028,7 @@ func (cm *ChunkManager) Render3D(cameraPos rl.Vector3, forwardDir rl.Vector3) {
 	}
 
 	// --- PASS 3: TRANSLUCENT WATER ON GPU WITH ALPHA BLENDING ---
-	rl.EnableBackfaceCulling()
+	rl.DisableBackfaceCulling() // Double-sided so water surface is visible both from above and from underwater
 	rl.BeginBlendMode(rl.BlendAlpha)
 	for _, chunk := range visibleChunks {
 		if chunk.HasWater {
@@ -880,5 +1036,4 @@ func (cm *ChunkManager) Render3D(cameraPos rl.Vector3, forwardDir rl.Vector3) {
 		}
 	}
 	rl.EndBlendMode()
-	rl.DisableBackfaceCulling()
 }

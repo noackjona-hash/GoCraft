@@ -19,6 +19,7 @@ type MCAudioEngine struct {
 	PlaceTimer float32
 	StepTimer  float32
 	TNTTimer   float32
+	SplashTimer float32
 
 	// Underwater Audio
 	IsUnderwater    bool
@@ -80,6 +81,16 @@ func (ae *MCAudioEngine) TriggerTNTExplosion() {
 	ae.TNTTimer = 0.75
 }
 
+// TriggerWaterSplash plays realistic water splashing sound
+func (ae *MCAudioEngine) TriggerWaterSplash() {
+	ae.SplashTimer = 0.28
+}
+
+// TriggerWaterPaddle plays soft water swimming strokes
+func (ae *MCAudioEngine) TriggerWaterPaddle() {
+	ae.SplashTimer = 0.14
+}
+
 // Update advances timers and ambient music
 func (ae *MCAudioEngine) Update(dt float32) {
 	if ae.BreakTimer > 0 {
@@ -93,6 +104,9 @@ func (ae *MCAudioEngine) Update(dt float32) {
 	}
 	if ae.TNTTimer > 0 {
 		ae.TNTTimer -= dt
+	}
+	if ae.SplashTimer > 0 {
+		ae.SplashTimer -= dt
 	}
 
 	if ae.IsUnderwater {
@@ -184,7 +198,15 @@ func (ae *MCAudioEngine) UpdateAudioStream() {
 			totalOut += subRumble + noise
 		}
 
-		// 5. Peaceful Ambient Piano Chords
+		// 5. Water Splash & Swimming
+		if ae.SplashTimer > 0 {
+			progress := float64(ae.SplashTimer / 0.28)
+			splashNoise := (rand.Float64()*2.0 - 1.0) * progress * 0.38
+			splashTone := math.Sin(float64(i)*260.0*progress*dtSample*twoPi) * progress * 0.22
+			totalOut += splashNoise + splashTone
+		}
+
+		// 6. Peaceful Ambient Piano Chords
 		if ae.MusicTimer < 6.0 {
 			musicEnv := math.Sin((float64(ae.MusicTimer) / 6.0) * math.Pi) * 0.12
 			curChord := chordFreqs[ae.ChordIndex]

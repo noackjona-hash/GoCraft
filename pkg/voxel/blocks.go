@@ -1,6 +1,7 @@
 package voxel
 
 import (
+	"math"
 	"math/rand"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
@@ -25,6 +26,7 @@ const (
 	BlockSand
 	BlockSandstone
 	BlockWater
+	BlockWaterFlowing
 	BlockCoalOre
 	BlockIronOre
 	BlockGoldOre
@@ -46,6 +48,14 @@ const (
 	BlockSpruceLog
 	BlockSprucePlanks
 	BlockSpruceLeaves
+
+	// Rotated Log Orientations (Horizontal X and Z axes)
+	BlockOakLogX
+	BlockOakLogZ
+	BlockBirchLogX
+	BlockBirchLogZ
+	BlockSpruceLogX
+	BlockSpruceLogZ
 
 	// Wildflowers
 	BlockDandelion
@@ -111,6 +121,10 @@ const (
 	ItemDiamondAxe
 	ItemDiamondShovel
 	ItemDiamondSword
+
+	// Buckets
+	ItemBucket
+	ItemWaterBucket
 )
 
 // BlockDef contains attributes, face colors, and tool mechanics
@@ -122,6 +136,7 @@ type BlockDef struct {
 	BottomColor      rl.Color
 	IsSolid          bool
 	IsTransparent    bool
+	IsLiquid         bool
 	IsLightSource    bool
 	LightLevel       uint8   // Emitted light level (0 to 15)
 	Hardness         float32 // Mining time
@@ -142,18 +157,106 @@ func IsPlant(b BlockType) bool {
 		b == BlockRedMushroom || b == BlockBrownMushroom
 }
 
+// IsWater returns true for still water source or flowing water
+func IsWater(b BlockType) bool {
+	return b == BlockWater || b == BlockWaterFlowing
+}
+
+// IsLiquid returns true for any fluid block
+func IsLiquid(b BlockType) bool {
+	return b == BlockWater || b == BlockWaterFlowing
+}
+
 // IsLeaf returns true for any tree leaves
 func IsLeaf(b BlockType) bool {
 	return b == BlockOakLeaves || b == BlockBirchLeaves || b == BlockSpruceLeaves
 }
 
-// IsLog returns true for any tree log
+// IsLog returns true for any tree log (vertical or rotated)
 func IsLog(b BlockType) bool {
-	return b == BlockOakLog || b == BlockBirchLog || b == BlockSpruceLog
+	return b == BlockOakLog || b == BlockOakLogX || b == BlockOakLogZ ||
+		b == BlockBirchLog || b == BlockBirchLogX || b == BlockBirchLogZ ||
+		b == BlockSpruceLog || b == BlockSpruceLogX || b == BlockSpruceLogZ
+}
+
+// GetBaseLog returns the standard vertical log block type
+func GetBaseLog(b BlockType) BlockType {
+	switch b {
+	case BlockOakLog, BlockOakLogX, BlockOakLogZ:
+		return BlockOakLog
+	case BlockBirchLog, BlockBirchLogX, BlockBirchLogZ:
+		return BlockBirchLog
+	case BlockSpruceLog, BlockSpruceLogX, BlockSpruceLogZ:
+		return BlockSpruceLog
+	default:
+		return b
+	}
+}
+
+// GetRotatedLogBlock determines the log orientation based on placement face normal
+func GetRotatedLogBlock(baseLog BlockType, norm rl.Vector3) BlockType {
+	base := GetBaseLog(baseLog)
+	absX := math.Abs(float64(norm.X))
+	absY := math.Abs(float64(norm.Y))
+	absZ := math.Abs(float64(norm.Z))
+
+	if absX > absY && absX > absZ {
+		switch base {
+		case BlockOakLog:
+			return BlockOakLogX
+		case BlockBirchLog:
+			return BlockBirchLogX
+		case BlockSpruceLog:
+			return BlockSpruceLogX
+		}
+	} else if absZ > absY && absZ > absX {
+		switch base {
+		case BlockOakLog:
+			return BlockOakLogZ
+		case BlockBirchLog:
+			return BlockBirchLogZ
+		case BlockSpruceLog:
+			return BlockSpruceLogZ
+		}
+	}
+
+	return base
+}
+
+// CycleBlockRotation cycles a rotatable block (Logs Y -> X -> Z -> Y)
+func CycleBlockRotation(b BlockType) BlockType {
+	switch b {
+	case BlockOakLog:
+		return BlockOakLogX
+	case BlockOakLogX:
+		return BlockOakLogZ
+	case BlockOakLogZ:
+		return BlockOakLog
+
+	case BlockBirchLog:
+		return BlockBirchLogX
+	case BlockBirchLogX:
+		return BlockBirchLogZ
+	case BlockBirchLogZ:
+		return BlockBirchLog
+
+	case BlockSpruceLog:
+		return BlockSpruceLogX
+	case BlockSpruceLogX:
+		return BlockSpruceLogZ
+	case BlockSpruceLogZ:
+		return BlockSpruceLog
+
+	default:
+		return b
+	}
 }
 
 // GetBlockDrop returns the item dropped when a block is mined
 func GetBlockDrop(b BlockType) BlockType {
+	if IsLog(b) {
+		return GetBaseLog(b)
+	}
 	if def, exists := BlockRegistry[b]; exists && def.DropItem != BlockAir {
 		return def.DropItem
 	}
@@ -181,8 +284,8 @@ func GetLightOpacity(b BlockType) uint8 {
 	if !exists || (def.IsSolid && !def.IsTransparent) {
 		return 15 // Completely opaque
 	}
-	if b == BlockWater {
-		return 3 // Water absorbs 3 light levels per block
+	if IsWater(b) {
+		return 2 // Water absorbs 2 light levels per block
 	}
 	if IsLeaf(b) {
 		return 2 // Leaves absorb 2 light levels per block
@@ -267,6 +370,26 @@ var BlockRegistry = map[BlockType]BlockDef{
 		IsSolid:     true,
 		Hardness:    1.8,
 	},
+	BlockOakLogX: {
+		Type:        BlockOakLogX,
+		Name:        "Oak Wood Log",
+		TopColor:    rl.NewColor(103, 82, 49, 255),
+		SideColor:   rl.NewColor(168, 134, 88, 255),
+		BottomColor: rl.NewColor(103, 82, 49, 255),
+		IsSolid:     true,
+		Hardness:    1.8,
+		DropItem:    BlockOakLog,
+	},
+	BlockOakLogZ: {
+		Type:        BlockOakLogZ,
+		Name:        "Oak Wood Log",
+		TopColor:    rl.NewColor(103, 82, 49, 255),
+		SideColor:   rl.NewColor(168, 134, 88, 255),
+		BottomColor: rl.NewColor(103, 82, 49, 255),
+		IsSolid:     true,
+		Hardness:    1.8,
+		DropItem:    BlockOakLog,
+	},
 	BlockOakPlanks: {
 		Type:        BlockOakPlanks,
 		Name:        "Oak Planks",
@@ -294,6 +417,26 @@ var BlockRegistry = map[BlockType]BlockDef{
 		BottomColor: rl.NewColor(190, 180, 150, 255),
 		IsSolid:     true,
 		Hardness:    2.0,
+	},
+	BlockBirchLogX: {
+		Type:        BlockBirchLogX,
+		Name:        "Birch Log",
+		TopColor:    rl.NewColor(220, 225, 215, 255),
+		SideColor:   rl.NewColor(190, 180, 150, 255),
+		BottomColor: rl.NewColor(220, 225, 215, 255),
+		IsSolid:     true,
+		Hardness:    2.0,
+		DropItem:    BlockBirchLog,
+	},
+	BlockBirchLogZ: {
+		Type:        BlockBirchLogZ,
+		Name:        "Birch Log",
+		TopColor:    rl.NewColor(220, 225, 215, 255),
+		SideColor:   rl.NewColor(190, 180, 150, 255),
+		BottomColor: rl.NewColor(220, 225, 215, 255),
+		IsSolid:     true,
+		Hardness:    2.0,
+		DropItem:    BlockBirchLog,
 	},
 	BlockBirchLeaves: {
 		Type:          BlockBirchLeaves,
@@ -335,13 +478,27 @@ var BlockRegistry = map[BlockType]BlockDef{
 	},
 	BlockWater: {
 		Type:          BlockWater,
-		Name:          "Water",
-		TopColor:      rl.NewColor(35, 110, 220, 175),
-		SideColor:     rl.NewColor(30, 95, 200, 175),
-		BottomColor:   rl.NewColor(25, 80, 180, 175),
+		Name:          "Water Source",
+		TopColor:      rl.NewColor(44, 115, 235, 210),
+		SideColor:     rl.NewColor(40, 105, 220, 210),
+		BottomColor:   rl.NewColor(35, 95, 205, 210),
 		IsSolid:       false,
 		IsTransparent: true,
+		IsLiquid:      true,
 		Hardness:      100.0,
+		DropItem:      BlockAir,
+	},
+	BlockWaterFlowing: {
+		Type:          BlockWaterFlowing,
+		Name:          "Flowing Water",
+		TopColor:      rl.NewColor(44, 115, 235, 195),
+		SideColor:     rl.NewColor(40, 105, 220, 195),
+		BottomColor:   rl.NewColor(35, 95, 205, 195),
+		IsSolid:       false,
+		IsTransparent: true,
+		IsLiquid:      true,
+		Hardness:      100.0,
+		DropItem:      BlockAir,
 	},
 	BlockCoalOre: {
 		Type:        BlockCoalOre,
@@ -481,6 +638,26 @@ var BlockRegistry = map[BlockType]BlockDef{
 		BottomColor: rl.NewColor(110, 85, 55, 255),
 		IsSolid:     true,
 		Hardness:    2.0,
+	},
+	BlockSpruceLogX: {
+		Type:        BlockSpruceLogX,
+		Name:        "Spruce Log",
+		TopColor:    rl.NewColor(60, 45, 30, 255),
+		SideColor:   rl.NewColor(110, 85, 55, 255),
+		BottomColor: rl.NewColor(60, 45, 30, 255),
+		IsSolid:     true,
+		Hardness:    2.0,
+		DropItem:    BlockSpruceLog,
+	},
+	BlockSpruceLogZ: {
+		Type:        BlockSpruceLogZ,
+		Name:        "Spruce Log",
+		TopColor:    rl.NewColor(60, 45, 30, 255),
+		SideColor:   rl.NewColor(110, 85, 55, 255),
+		BottomColor: rl.NewColor(60, 45, 30, 255),
+		IsSolid:     true,
+		Hardness:    2.0,
+		DropItem:    BlockSpruceLog,
 	},
 	BlockSprucePlanks: {
 		Type:        BlockSprucePlanks,
@@ -953,5 +1130,21 @@ var BlockRegistry = map[BlockType]BlockDef{
 		Name:      "Arrow",
 		TopColor:  rl.NewColor(160, 150, 140, 255),
 		SideColor: rl.NewColor(140, 130, 120, 255),
+	},
+	ItemBucket: {
+		Type:      ItemBucket,
+		Name:      "Bucket",
+		TopColor:  rl.NewColor(220, 220, 220, 255),
+		SideColor: rl.NewColor(180, 180, 180, 255),
+		IsSolid:   false,
+		Hardness:  0.1,
+	},
+	ItemWaterBucket: {
+		Type:      ItemWaterBucket,
+		Name:      "Water Bucket",
+		TopColor:  rl.NewColor(60, 130, 240, 255),
+		SideColor: rl.NewColor(180, 180, 180, 255),
+		IsSolid:   false,
+		Hardness:  0.1,
 	},
 }

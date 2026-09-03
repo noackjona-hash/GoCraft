@@ -60,11 +60,31 @@ func GetBlockTextureAtlasPos(b BlockType, face FaceType) (int, int) {
 			return 12, 0 // Oak Log Top
 		}
 		return 11, 0 // Oak Log Side
+	case BlockOakLogX:
+		if face == FaceWest || face == FaceEast {
+			return 12, 0 // Rings on X axis
+		}
+		return 11, 0 // Bark
+	case BlockOakLogZ:
+		if face == FaceNorth || face == FaceSouth {
+			return 12, 0 // Rings on Z axis
+		}
+		return 11, 0 // Bark
 	case BlockBirchLog:
 		if face == FaceTop || face == FaceBottom {
 			return 10, 2 // Birch Log Top
 		}
 		return 9, 2 // Birch Log Side
+	case BlockBirchLogX:
+		if face == FaceWest || face == FaceEast {
+			return 10, 2 // Rings on X axis
+		}
+		return 9, 2 // Bark
+	case BlockBirchLogZ:
+		if face == FaceNorth || face == FaceSouth {
+			return 10, 2 // Rings on Z axis
+		}
+		return 9, 2 // Bark
 	case BlockOakLeaves:
 		return 14, 0
 	case BlockBirchLeaves:
@@ -74,6 +94,16 @@ func GetBlockTextureAtlasPos(b BlockType, face FaceType) (int, int) {
 			return 3, 2 // Spruce Log Top
 		}
 		return 2, 2 // Spruce Log Side
+	case BlockSpruceLogX:
+		if face == FaceWest || face == FaceEast {
+			return 3, 2 // Rings on X axis
+		}
+		return 2, 2 // Bark
+	case BlockSpruceLogZ:
+		if face == FaceNorth || face == FaceSouth {
+			return 3, 2 // Rings on Z axis
+		}
+		return 2, 2 // Bark
 	case BlockSpruceLeaves:
 		return 4, 2
 	case BlockSprucePlanks:
@@ -164,6 +194,12 @@ func GetBlockTextureAtlasPos(b BlockType, face FaceType) (int, int) {
 		return 0, 2
 	case BlockWater:
 		return 1, 2
+	case BlockWaterFlowing:
+		return 0, 14
+	case ItemWaterBucket:
+		return 11, 5
+	case ItemBucket:
+		return 12, 5
 	case ItemStick:
 		return 0, 3
 	case ItemDiamond:

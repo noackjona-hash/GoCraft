@@ -255,6 +255,17 @@ func init() {
 			Output: ItemStack{Type: voxel.ItemIronSword, Count: 1},
 		},
 
+		// Bucket (3 Iron Ingots in V-shape)
+		{
+			Width:  3,
+			Height: 2,
+			Pattern: []voxel.BlockType{
+				voxel.ItemIronIngot, voxel.BlockAir, voxel.ItemIronIngot,
+				voxel.BlockAir, voxel.ItemIronIngot, voxel.BlockAir,
+			},
+			Output: ItemStack{Type: voxel.ItemBucket, Count: 1},
+		},
+
 		// --- DIAMOND TOOLS ---
 		// Diamond Pickaxe (3 Diamonds + 2 Sticks)
 		{

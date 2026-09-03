@@ -46,11 +46,64 @@ func RaycastVoxel(origin rl.Vector3, direction rl.Vector3, maxDist float32, worl
 		bz := int(math.Floor(float64(curPos.Z)))
 
 		bType := world.GetBlock(bx, by, bz)
-		if bType != BlockAir && bType != BlockWater {
+		if bType != BlockAir && !IsWater(bType) {
 			// Found targeted block!
 			hitPos := rl.Vector3{X: float32(bx), Y: float32(by), Z: float32(bz)}
 
 			// Calculate face normal
+			norm := rl.Vector3{
+				X: lastAirPos.X - hitPos.X,
+				Y: lastAirPos.Y - hitPos.Y,
+				Z: lastAirPos.Z - hitPos.Z,
+			}
+
+			return RaycastResult{
+				Hit:         true,
+				BlockPos:    hitPos,
+				PlacePos:    lastAirPos,
+				HitNormal:   norm,
+				HitDistance: dist,
+				BlockType:   bType,
+			}
+		}
+
+		lastAirPos = rl.Vector3{X: float32(bx), Y: float32(by), Z: float32(bz)}
+	}
+
+	return RaycastResult{}
+}
+
+// RaycastVoxelWithLiquids traces a ray that also collides with water surfaces (for bucket interactions)
+func RaycastVoxelWithLiquids(origin rl.Vector3, direction rl.Vector3, maxDist float32, world *VoxelWorld) RaycastResult {
+	dirLen := float32(math.Sqrt(float64(direction.X*direction.X + direction.Y*direction.Y + direction.Z*direction.Z)))
+	if dirLen < 0.0001 {
+		return RaycastResult{}
+	}
+	dir := rl.Vector3{X: direction.X / dirLen, Y: direction.Y / dirLen, Z: direction.Z / dirLen}
+
+	stepSize := float32(0.04)
+	dist := float32(0.0)
+
+	curPos := origin
+	var lastAirPos rl.Vector3 = rl.Vector3{
+		X: float32(math.Floor(float64(origin.X))),
+		Y: float32(math.Floor(float64(origin.Y))),
+		Z: float32(math.Floor(float64(origin.Z))),
+	}
+
+	for dist < maxDist {
+		curPos.X += dir.X * stepSize
+		curPos.Y += dir.Y * stepSize
+		curPos.Z += dir.Z * stepSize
+		dist += stepSize
+
+		bx := int(math.Floor(float64(curPos.X)))
+		by := int(math.Floor(float64(curPos.Y)))
+		bz := int(math.Floor(float64(curPos.Z)))
+
+		bType := world.GetBlock(bx, by, bz)
+		if bType != BlockAir {
+			hitPos := rl.Vector3{X: float32(bx), Y: float32(by), Z: float32(bz)}
 			norm := rl.Vector3{
 				X: lastAirPos.X - hitPos.X,
 				Y: lastAirPos.Y - hitPos.Y,

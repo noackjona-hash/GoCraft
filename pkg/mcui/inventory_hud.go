@@ -129,6 +129,13 @@ func (gui *InventoryGUI) ConsumeActiveItem() {
 	gui.RemoveActiveItem(1)
 }
 
+// SetActiveSlotItem sets the item type and count of the currently active hotbar slot
+func (gui *InventoryGUI) SetActiveSlotItem(bType voxel.BlockType, count int) {
+	if gui.SelectedSlot >= 0 && gui.SelectedSlot < 9 {
+		gui.HotbarSlots[gui.SelectedSlot] = ItemStack{Type: bType, Count: count}
+	}
+}
+
 // RemoveActiveItem removes up to count items from the currently selected hotbar slot and returns the amount actually removed
 func (gui *InventoryGUI) RemoveActiveItem(count int) int {
 	if gui.SelectedSlot >= 0 && gui.SelectedSlot < 9 {

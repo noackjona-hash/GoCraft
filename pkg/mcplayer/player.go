@@ -430,8 +430,8 @@ func (p *MCPlayer) checkWaterState(world *voxel.VoxelWorld) {
 	waistBlock := world.GetBlock(bx, waistY, bz)
 	headBlock := world.GetBlock(bx, headY, bz)
 
-	p.IsSwimming = (feetBlock == voxel.BlockWater || waistBlock == voxel.BlockWater || headBlock == voxel.BlockWater)
-	p.IsSubmerged = (headBlock == voxel.BlockWater)
+	p.IsSwimming = (voxel.IsWater(feetBlock) || voxel.IsWater(waistBlock) || voxel.IsWater(headBlock))
+	p.IsSubmerged = voxel.IsWater(headBlock)
 }
 
 // ---------------------------------------------------------------------------
@@ -530,7 +530,7 @@ func (p *MCPlayer) handleJumpAndSwim(dt float32, forward rl.Vector3, world *voxe
 			p.Vel.Y = SwimUpSpeed
 
 			// Surface hop onto land (head above water, waist still in).
-			waistInWater := world.GetBlock(int(floor32(p.Pos.X)), int(floor32(p.Pos.Y+0.8)), int(floor32(p.Pos.Z))) == voxel.BlockWater
+			waistInWater := voxel.IsWater(world.GetBlock(int(floor32(p.Pos.X)), int(floor32(p.Pos.Y+0.8)), int(floor32(p.Pos.Z))))
 			if !p.IsSubmerged && waistInWater {
 				shoreX := int(floor32(p.Pos.X + forward.X*0.6))
 				shoreZ := int(floor32(p.Pos.Z + forward.Z*0.6))
@@ -870,32 +870,37 @@ func (p *MCPlayer) RenderHandAndHeldBlock(heldBlock voxel.BlockType, atlas *voxe
 	f1 := sin32(swingProgress * math.Pi)
 	f2 := sin32(sqrt32(swingProgress) * math.Pi)
 
-	// Minecraft swing translations & rotations:
-	swingX := -f2 * 0.18
-	swingY := sin32(sqrt32(swingProgress)*math.Pi*2.0) * 0.12
-	swingZ := -f1 * 0.14
+	// Base angles for iconic Minecraft diagonal first-person arm posture
+	baseRotX := float32(-18.0 * (math.Pi / 180.0)) // Tilted upward
+	baseRotY := float32(-28.0 * (math.Pi / 180.0)) // Angled inward towards center
+	baseRotZ := float32(-10.0 * (math.Pi / 180.0)) // Slight inward roll
 
-	rotX := -f2 * 68.0 * (math.Pi / 180.0) // Chops downward
-	rotY := -f1 * 26.0 * (math.Pi / 180.0) // Yaws inward
-	rotZ := -f1 * 18.0 * (math.Pi / 180.0) // Rolls slightly
+	// Dynamic swing additions (pitch chop, yaw inward, roll)
+	rotX := baseRotX - f2*62.0*(math.Pi/180.0)
+	rotY := baseRotY - f1*24.0*(math.Pi/180.0)
+	rotZ := baseRotZ - f1*16.0*(math.Pi/180.0)
 
-	// Item equip dip & rise:
-	equipY := (1.0 - p.EquipProgress) * -0.35
+	swingX := -f2 * 0.16
+	swingY := sin32(sqrt32(swingProgress)*math.Pi*2.0) * 0.09
+	swingZ := -f1 * 0.12
 
-	// Walk bobbing (sinusoidal camera-relative bob):
-	bobX := sin32(p.WalkBobbing*0.5) * 0.010
-	bobY := -abs32(cos32(p.WalkBobbing)) * 0.010
+	// Item equip dip & rise
+	equipY := (1.0 - p.EquipProgress) * -0.30
 
-	// Pivot point for hand / item rotation (around wrist):
-	pivotX := float32(0.30)
-	pivotY := float32(-0.25)
-	pivotZ := float32(0.35)
+	// Walk bobbing (sinusoidal camera-relative bob)
+	bobX := sin32(p.WalkBobbing*0.5) * 0.008
+	bobY := -abs32(cos32(p.WalkBobbing)) * 0.008
+
+	// Pivot point for hand / item rotation (around shoulder / elbow)
+	pivotX := float32(0.28)
+	pivotY := float32(-0.24)
+	pivotZ := float32(0.34)
 
 	// Helper to apply 3D transformation and emit world vertex
 	vtxTransformed := func(lx, ly, lz float32, u, v float32) {
-		dx := lx - pivotX
-		dy := ly - pivotY
-		dz := lz - pivotZ
+		dx := lx
+		dy := ly
+		dz := lz
 
 		// Rotate Z (roll)
 		x1 := dx*cos32(rotZ) - dy*sin32(rotZ)
@@ -938,43 +943,60 @@ func (p *MCPlayer) RenderHandAndHeldBlock(heldBlock voxel.BlockType, atlas *voxe
 		heldBlock == voxel.BlockTorch || heldBlock == voxel.ItemGunpowder || heldBlock == voxel.ItemBone ||
 		heldBlock == voxel.ItemArrow
 
-	shirtU0, shirtV0, shirtU1, shirtV1 := float32(6)/16.0, float32(2)/16.0, float32(7)/16.0, float32(3)/16.0
-	skinU0, skinV0, skinU1, skinV1 := float32(7)/16.0, float32(2)/16.0, float32(8)/16.0, float32(3)/16.0
+	// Dedicated Row 15 Steve textures (0, 15 = Shirt, 1, 15 = Skin)
+	shirtU0, shirtV0, shirtU1, shirtV1 := float32(0)/16.0, float32(15)/16.0, float32(1)/16.0, float32(16)/16.0
+	skinU0, skinV0, skinU1, skinV1 := float32(1)/16.0, float32(15)/16.0, float32(2)/16.0, float32(16)/16.0
 
-	drawBox := func(x0, y0, z0, x1, y1, z1 float32, u0, v0, u1, v1 float32, col rl.Color) {
-		rl.Color4ub(col.R, col.G, col.B, col.A)
+	eps := float32(0.5) / float32(atlas.Texture.Width)
+	shirtU0 += eps
+	shirtV0 += eps
+	shirtU1 -= eps
+	shirtV1 -= eps
+	skinU0 += eps
+	skinV0 += eps
+	skinU1 -= eps
+	skinV1 -= eps
 
-		// Top Face (+Y)
+	drawBox := func(x0, y0, z0, x1, y1, z1 float32, u0, v0, u1, v1 float32, baseCol rl.Color) {
+		r, g, b := float32(baseCol.R), float32(baseCol.G), float32(baseCol.B)
+
+		// Top Face (+Y) - 100% light
+		rl.Color4ub(uint8(r*1.0), uint8(g*1.0), uint8(b*1.0), baseCol.A)
 		vtxTransformed(x0, y1, z1, u0, v1)
 		vtxTransformed(x1, y1, z1, u1, v1)
 		vtxTransformed(x1, y1, z0, u1, v0)
 		vtxTransformed(x0, y1, z0, u0, v0)
 
-		// Bottom Face (-Y)
+		// Bottom Face (-Y) - 55% light
+		rl.Color4ub(uint8(r*0.55), uint8(g*0.55), uint8(b*0.55), baseCol.A)
 		vtxTransformed(x0, y0, z0, u0, v1)
 		vtxTransformed(x1, y0, z0, u1, v1)
 		vtxTransformed(x1, y0, z1, u1, v0)
 		vtxTransformed(x0, y0, z1, u0, v0)
 
-		// Front (+Z)
+		// Front Face (+Z) - 85% light
+		rl.Color4ub(uint8(r*0.85), uint8(g*0.85), uint8(b*0.85), baseCol.A)
 		vtxTransformed(x1, y0, z1, u1, v1)
 		vtxTransformed(x0, y0, z1, u0, v1)
 		vtxTransformed(x0, y1, z1, u0, v0)
 		vtxTransformed(x1, y1, z1, u1, v0)
 
-		// Back (-Z)
+		// Back Face (-Z) - 80% light
+		rl.Color4ub(uint8(r*0.80), uint8(g*0.80), uint8(b*0.80), baseCol.A)
 		vtxTransformed(x0, y0, z0, u0, v1)
 		vtxTransformed(x1, y0, z0, u1, v1)
 		vtxTransformed(x1, y1, z0, u1, v0)
 		vtxTransformed(x0, y1, z0, u0, v0)
 
-		// Left (-X)
+		// Left Face (-X) - 65% light
+		rl.Color4ub(uint8(r*0.65), uint8(g*0.65), uint8(b*0.65), baseCol.A)
 		vtxTransformed(x0, y0, z0, u0, v1)
 		vtxTransformed(x0, y0, z1, u1, v1)
 		vtxTransformed(x0, y1, z1, u1, v0)
 		vtxTransformed(x0, y1, z0, u0, v0)
 
-		// Right (+X)
+		// Right Face (+X) - 75% light
+		rl.Color4ub(uint8(r*0.75), uint8(g*0.75), uint8(b*0.75), baseCol.A)
 		vtxTransformed(x1, y0, z1, u0, v1)
 		vtxTransformed(x1, y0, z0, u1, v1)
 		vtxTransformed(x1, y1, z0, u1, v0)
@@ -985,99 +1007,90 @@ func (p *MCPlayer) RenderHandAndHeldBlock(heldBlock voxel.BlockType, atlas *voxe
 	rl.SetTexture(atlas.Texture.ID)
 
 	if heldBlock == voxel.BlockAir {
-		// 1. Empty Steve Arm / Fist.
-		ax := float32(0.28)
-		ay := float32(-0.24)
-		az := float32(0.40)
-
-		// Sleeve (Cyan Shirt).
-		drawBox(ax-0.045, ay-0.09, az-0.14, ax+0.055, ay+0.035, az+0.02, shirtU0, shirtV0, shirtU1, shirtV1, rl.White)
-		// Forearm & Fist (Skin).
-		drawBox(ax-0.04, ay-0.08, az+0.02, ax+0.05, ay+0.03, az+0.16, skinU0, skinV0, skinU1, skinV1, rl.White)
+		// 1. Empty Steve Arm / Fist (comes cleanly from bottom-right towards center)
+		// Sleeve (Cyan Shirt)
+		drawBox(-0.045, -0.045, -0.16, 0.045, 0.045, -0.05, shirtU0, shirtV0, shirtU1, shirtV1, rl.White)
+		// Forearm & Fist (Skin)
+		drawBox(-0.040, -0.040, -0.05, 0.040, 0.040, 0.16, skinU0, skinV0, skinU1, skinV1, rl.White)
 	} else if isFlatItem {
-		// 2. 2D Tool Sprite (Pickaxes, Swords, Axes, Shovels, Sticks).
-		cx := float32(0.26)
-		cy := float32(-0.16)
-		cz := float32(0.42)
-
+		// 2. 2D Tool Sprite (Pickaxes, Swords, Axes, Shovels, Sticks)
 		u0, v0, u1, v1 := voxel.GetBlockTextureUVs(heldBlock, voxel.FaceNorth)
 		s := float32(0.14)
 
 		rl.Color4ub(255, 255, 255, 255)
 
-		// Front Face (45 deg diagonal Minecraft tool posture).
-		vtxTransformed(cx-s*0.35, cy-s*0.65, cz-0.015, u0, v1)
-		vtxTransformed(cx+s*0.75, cy-s*0.15, cz+0.015, u1, v1)
-		vtxTransformed(cx+s*0.45, cy+s*0.85, cz+0.035, u1, v0)
-		vtxTransformed(cx-s*0.65, cy+s*0.35, cz+0.005, u0, v0)
+		// Front Face (45 deg diagonal Minecraft tool posture)
+		vtxTransformed(-s*0.35, -s*0.65+0.06, 0.08-0.015, u0, v1)
+		vtxTransformed(+s*0.75, -s*0.15+0.06, 0.08+0.015, u1, v1)
+		vtxTransformed(+s*0.45, +s*0.85+0.06, 0.08+0.035, u1, v0)
+		vtxTransformed(-s*0.65, +s*0.35+0.06, 0.08+0.005, u0, v0)
 
-		// Back Face.
-		vtxTransformed(cx+s*0.75, cy-s*0.15, cz+0.015, u1, v1)
-		vtxTransformed(cx-s*0.35, cy-s*0.65, cz-0.015, u0, v1)
-		vtxTransformed(cx-s*0.65, cy+s*0.35, cz+0.005, u0, v0)
-		vtxTransformed(cx+s*0.45, cy+s*0.85, cz+0.035, u1, v0)
+		// Back Face
+		vtxTransformed(+s*0.75, -s*0.15+0.06, 0.08+0.015, u1, v1)
+		vtxTransformed(-s*0.35, -s*0.65+0.06, 0.08-0.015, u0, v1)
+		vtxTransformed(-s*0.65, +s*0.35+0.06, 0.08+0.005, u0, v0)
+		vtxTransformed(+s*0.45, +s*0.85+0.06, 0.08+0.035, u1, v0)
 
 		// Steve Arm holding the tool handle:
-		drawBox(cx+0.02, cy-0.34, cz-0.12, cx+0.12, cy-0.19, cz+0.04, shirtU0, shirtV0, shirtU1, shirtV1, rl.White)
-		drawBox(cx+0.025, cy-0.19, cz+0.00, cx+0.11, cy-0.03, cz+0.14, skinU0, skinV0, skinU1, skinV1, rl.White)
+		drawBox(0.01, -0.16, -0.16, 0.09, -0.08, -0.04, shirtU0, shirtV0, shirtU1, shirtV1, rl.White)
+		drawBox(0.015, -0.15, -0.04, 0.085, -0.09, 0.08, skinU0, skinV0, skinU1, skinV1, rl.White)
 	} else {
-		// 3. Mini 3D Voxel Block.
-		cx := float32(0.26)
-		cy := float32(-0.18)
-		cz := float32(0.42)
+		// 3. Mini 3D Voxel Block
 		hs := float32(0.06)
+		by := float32(0.04)
+		bz := float32(0.06)
 
-		// Top Face (+Y).
+		// Top Face (+Y)
 		u0, v0, u1, v1 := voxel.GetBlockTextureUVs(heldBlock, voxel.FaceTop)
 		rl.Color4ub(255, 255, 255, 255)
-		vtxTransformed(cx-hs, cy+hs, cz+hs, u0, v1)
-		vtxTransformed(cx+hs, cy+hs, cz+hs, u1, v1)
-		vtxTransformed(cx+hs, cy+hs, cz-hs, u1, v0)
-		vtxTransformed(cx-hs, cy+hs, cz-hs, u0, v0)
+		vtxTransformed(-hs, by+hs, bz+hs, u0, v1)
+		vtxTransformed(+hs, by+hs, bz+hs, u1, v1)
+		vtxTransformed(+hs, by+hs, bz-hs, u1, v0)
+		vtxTransformed(-hs, by+hs, bz-hs, u0, v0)
 
-		// Bottom Face (-Y).
+		// Bottom Face (-Y)
 		u0, v0, u1, v1 = voxel.GetBlockTextureUVs(heldBlock, voxel.FaceBottom)
 		rl.Color4ub(160, 160, 160, 255)
-		vtxTransformed(cx-hs, cy-hs, cz-hs, u0, v1)
-		vtxTransformed(cx+hs, cy-hs, cz-hs, u1, v1)
-		vtxTransformed(cx+hs, cy-hs, cz+hs, u1, v0)
-		vtxTransformed(cx-hs, cy-hs, cz+hs, u0, v0)
+		vtxTransformed(-hs, by-hs, bz-hs, u0, v1)
+		vtxTransformed(+hs, by-hs, bz-hs, u1, v1)
+		vtxTransformed(+hs, by-hs, bz+hs, u1, v0)
+		vtxTransformed(-hs, by-hs, bz+hs, u0, v0)
 
-		// Front Face (+Z).
+		// Front Face (+Z)
 		u0, v0, u1, v1 = voxel.GetBlockTextureUVs(heldBlock, voxel.FaceSouth)
 		rl.Color4ub(220, 220, 220, 255)
-		vtxTransformed(cx+hs, cy-hs, cz+hs, u1, v1)
-		vtxTransformed(cx-hs, cy-hs, cz+hs, u0, v1)
-		vtxTransformed(cx-hs, cy+hs, cz+hs, u0, v0)
-		vtxTransformed(cx+hs, cy+hs, cz+hs, u1, v0)
+		vtxTransformed(+hs, by-hs, bz+hs, u1, v1)
+		vtxTransformed(-hs, by-hs, bz+hs, u0, v1)
+		vtxTransformed(-hs, by+hs, bz+hs, u0, v0)
+		vtxTransformed(+hs, by+hs, bz+hs, u1, v0)
 
-		// Back Face (-Z).
+		// Back Face (-Z)
 		u0, v0, u1, v1 = voxel.GetBlockTextureUVs(heldBlock, voxel.FaceNorth)
 		rl.Color4ub(200, 200, 200, 255)
-		vtxTransformed(cx-hs, cy-hs, cz-hs, u0, v1)
-		vtxTransformed(cx+hs, cy-hs, cz-hs, u1, v1)
-		vtxTransformed(cx+hs, cy+hs, cz-hs, u1, v0)
-		vtxTransformed(cx-hs, cy+hs, cz-hs, u0, v0)
+		vtxTransformed(-hs, by-hs, bz-hs, u0, v1)
+		vtxTransformed(+hs, by-hs, bz-hs, u1, v1)
+		vtxTransformed(+hs, by+hs, bz-hs, u1, v0)
+		vtxTransformed(-hs, by+hs, bz-hs, u0, v0)
 
-		// Left Face (-X).
+		// Left Face (-X)
 		u0, v0, u1, v1 = voxel.GetBlockTextureUVs(heldBlock, voxel.FaceWest)
 		rl.Color4ub(190, 190, 190, 255)
-		vtxTransformed(cx-hs, cy-hs, cz-hs, u0, v1)
-		vtxTransformed(cx-hs, cy-hs, cz+hs, u1, v1)
-		vtxTransformed(cx-hs, cy+hs, cz+hs, u1, v0)
-		vtxTransformed(cx-hs, cy+hs, cz-hs, u0, v0)
+		vtxTransformed(-hs, by-hs, bz-hs, u0, v1)
+		vtxTransformed(-hs, by-hs, bz+hs, u1, v1)
+		vtxTransformed(-hs, by+hs, bz+hs, u1, v0)
+		vtxTransformed(-hs, by+hs, bz-hs, u0, v0)
 
-		// Right Face (+X).
+		// Right Face (+X)
 		u0, v0, u1, v1 = voxel.GetBlockTextureUVs(heldBlock, voxel.FaceEast)
 		rl.Color4ub(210, 210, 210, 255)
-		vtxTransformed(cx+hs, cy-hs, cz+hs, u0, v1)
-		vtxTransformed(cx+hs, cy-hs, cz-hs, u1, v1)
-		vtxTransformed(cx+hs, cy+hs, cz-hs, u1, v0)
-		vtxTransformed(cx+hs, cy+hs, cz+hs, u0, v0)
+		vtxTransformed(+hs, by-hs, bz+hs, u0, v1)
+		vtxTransformed(+hs, by-hs, bz-hs, u1, v1)
+		vtxTransformed(+hs, by+hs, bz-hs, u1, v0)
+		vtxTransformed(+hs, by+hs, bz+hs, u0, v0)
 
-		// Arm holding block:
-		drawBox(cx+0.04, cy-0.14, cz-0.10, cx+0.13, cy-0.03, cz+0.01, shirtU0, shirtV0, shirtU1, shirtV1, rl.White)
-		drawBox(cx+0.03, cy-0.12, cz+0.01, cx+0.10, cy-0.02, cz+0.09, skinU0, skinV0, skinU1, skinV1, rl.White)
+		// Steve Arm supporting block:
+		drawBox(0.01, -0.14, -0.16, 0.09, -0.06, -0.04, shirtU0, shirtV0, shirtU1, shirtV1, rl.White)
+		drawBox(0.015, -0.13, -0.04, 0.085, -0.07, 0.06, skinU0, skinV0, skinU1, skinV1, rl.White)
 	}
 
 	rl.End()

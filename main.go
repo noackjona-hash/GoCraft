@@ -36,7 +36,8 @@ func loadCelestialTexture(filePath string) rl.Texture2D {
 func main() {
 	rand.Seed(time.Now().UnixNano())
 
-	rl.SetConfigFlags(rl.FlagMsaa4xHint | rl.FlagWindowResizable | rl.FlagWindowHighdpi)
+	// High-performance window configuration (MSAA 4x removed to eliminate fillrate choke on iGPUs)
+	rl.SetConfigFlags(rl.FlagWindowResizable | rl.FlagWindowHighdpi)
 	rl.InitWindow(1920, 1080, "GoCraft 3D — Survival & Crafting Voxel Engine")
 	defer rl.CloseWindow()
 
@@ -225,6 +226,13 @@ func main() {
 	}
 	defer saveWorldState()
 
+	// Background simulation timers for high FPS stability
+	randomTickTimer := float32(0)
+	waterSpreadTimer := float32(0)
+	renderDistToastTimer := float32(0)
+	renderDistToastMsg := ""
+	wasInWater := false
+
 	// Main Game Loop
 	for !rl.WindowShouldClose() {
 		dt := rl.GetFrameTime()
@@ -296,6 +304,22 @@ func main() {
 		if rl.IsKeyPressed(rl.KeyF5) && !player.IsDead {
 			saveWorldState()
 			autosaveTimer = 0
+			audioEngine.TriggerBlockPlace()
+		}
+
+		// 'F4' Key: Cycle Render Distance (3, 4, 5, 6 chunks) for instant FPS boost
+		if rl.IsKeyPressed(rl.KeyF4) && !player.IsDead {
+			newRadius := chunkManager.CycleRenderRadius()
+			desc := "Fast (High FPS)"
+			if newRadius == 3 {
+				desc = "Ultra Performance (Low-End / Laptop)"
+			} else if newRadius == 5 {
+				desc = "Normal (Balanced)"
+			} else if newRadius == 6 {
+				desc = "Fancy (169 Chunks)"
+			}
+			renderDistToastMsg = fmt.Sprintf("Render Distance: %d Chunks — %s", newRadius, desc)
+			renderDistToastTimer = 2.5
 			audioEngine.TriggerBlockPlace()
 		}
 
@@ -594,10 +618,44 @@ func main() {
 			heldBlock := gui.GetActiveBlock()
 			bDef := voxel.BlockRegistry[heldBlock]
 
-			// Right Click: Interact with Crafting Table, Furnace, or Place Block
+			// Right Click: Interact with Crafting Table, Furnace, Bucket, or Place Block
 			if rl.IsMouseButtonPressed(rl.MouseButtonRight) && !bDef.IsFood {
 				player.TriggerSwing()
-				if rayResult.Hit {
+
+				// 1. Bucket Interactions (Empty Bucket & Water Bucket)
+				if heldBlock == voxel.ItemBucket {
+					liquidRay := voxel.RaycastVoxelWithLiquids(player.RLCamera.Position, lookDir, 5.5, world)
+					if liquidRay.Hit && voxel.IsWater(liquidRay.BlockType) {
+						bx := int(liquidRay.BlockPos.X)
+						by := int(liquidRay.BlockPos.Y)
+						bz := int(liquidRay.BlockPos.Z)
+						world.SetBlock(bx, by, bz, voxel.BlockAir)
+						chunkManager.MarkBlockDirty(bx, bz)
+						audioEngine.TriggerWaterSplash()
+						player.SpawnBlockBreakParticles(liquidRay.BlockPos, voxel.BlockWater)
+						if player.Mode == mcplayer.GameModeSurvival {
+							gui.SetActiveSlotItem(voxel.ItemWaterBucket, 1)
+						}
+					}
+				} else if heldBlock == voxel.ItemWaterBucket {
+					liquidRay := voxel.RaycastVoxelWithLiquids(player.RLCamera.Position, lookDir, 5.5, world)
+					targetRay := rayResult
+					if liquidRay.Hit {
+						targetRay = liquidRay
+					}
+					if targetRay.Hit {
+						px := int(targetRay.PlacePos.X)
+						py := int(targetRay.PlacePos.Y)
+						pz := int(targetRay.PlacePos.Z)
+						world.SetBlock(px, py, pz, voxel.BlockWater)
+						chunkManager.MarkBlockDirty(px, pz)
+						audioEngine.TriggerWaterSplash()
+						player.SpawnBlockBreakParticles(targetRay.PlacePos, voxel.BlockWater)
+						if player.Mode == mcplayer.GameModeSurvival {
+							gui.SetActiveSlotItem(voxel.ItemBucket, 1)
+						}
+					}
+				} else if rayResult.Hit {
 					bx := int(rayResult.BlockPos.X)
 					by := int(rayResult.BlockPos.Y)
 					bz := int(rayResult.BlockPos.Z)
@@ -626,7 +684,12 @@ func main() {
 
 							overlapPlayer := (px == playerBlockX && pz == playerBlockZ && (py == playerBlockY1 || py == playerBlockY2))
 							if !overlapPlayer {
-								world.SetBlock(px, py, pz, heldBlock)
+								blockToPlace := heldBlock
+								if voxel.IsLog(heldBlock) {
+									blockToPlace = voxel.GetRotatedLogBlock(heldBlock, rayResult.HitNormal)
+								}
+
+								world.SetBlock(px, py, pz, blockToPlace)
 								chunkManager.MarkBlockDirty(px, pz)
 								audioEngine.TriggerBlockPlace()
 
@@ -642,6 +705,24 @@ func main() {
 					}
 				}
 			}
+
+			// 'R' Key: Rotate targeted block (Logs Y <-> X <-> Z)
+			if rayResult.Hit && rl.IsKeyPressed(rl.KeyR) {
+				bx := int(rayResult.BlockPos.X)
+				by := int(rayResult.BlockPos.Y)
+				bz := int(rayResult.BlockPos.Z)
+				targetBlock := world.GetBlock(bx, by, bz)
+
+				if voxel.IsLog(targetBlock) {
+					rotated := voxel.CycleBlockRotation(targetBlock)
+					if rotated != targetBlock {
+						world.SetBlock(bx, by, bz, rotated)
+						chunkManager.MarkBlockDirty(bx, bz)
+						audioEngine.TriggerBlockPlace()
+						player.SpawnBlockBreakParticles(rayResult.BlockPos, targetBlock)
+					}
+				}
+			}
 		}
 
 		// Update Audio Synthesizer & Underwater Status
@@ -652,22 +733,39 @@ func main() {
 		// Update Scheduled Block Physics (Smooth falling sand and leaf decay)
 		world.TickScheduledPhysics(dt, chunkManager, player.SpawnBlockBreakParticles)
 
-		// Periodic Grass Spreading, Growth & Random Block Ticks
-		world.TickRandomBlocks(player.Pos, chunkManager)
+		// Throttled Grass Spreading, Growth & Random Block Ticks (10x per sec instead of 300x per sec)
+		randomTickTimer += dt
+		if randomTickTimer >= 0.15 {
+			randomTickTimer = 0
+			world.TickRandomBlocks(player.Pos, chunkManager)
+		}
 
-		// Periodic Water Flow & Falling Sand Simulation around player
-		if rand.Intn(20) == 0 {
+		// Water Splash SFX and Particles on entering/jumping in water
+		if player.IsSwimming && !wasInWater {
+			audioEngine.TriggerWaterSplash()
+			splashPos := player.Pos
+			splashPos.Y += 0.2
+			for s := 0; s < 12; s++ {
+				player.SpawnBlockBreakParticles(splashPos, voxel.BlockWater)
+			}
+		}
+		wasInWater = player.IsSwimming
+
+		// Throttled Water Flow & Falling Sand Simulation around player (4x per sec)
+		waterSpreadTimer += dt
+		if waterSpreadTimer >= 0.25 {
+			waterSpreadTimer = 0
 			pcx := int(math.Floor(float64(player.Pos.X)))
 			pcy := int(math.Floor(float64(player.Pos.Y)))
 			pcz := int(math.Floor(float64(player.Pos.Z)))
 			for ox := -4; ox <= 4; ox++ {
 				for oz := -4; oz <= 4; oz++ {
-					for oy := -2; oy <= 2; oy++ {
+					for oy := -3; oy <= 3; oy++ {
 						tx := pcx + ox
 						ty := pcy + oy
 						tz := pcz + oz
 						b := world.GetBlock(tx, ty, tz)
-						if b == voxel.BlockWater {
+						if voxel.IsWater(b) {
 							world.SpreadWater(tx, ty, tz, chunkManager)
 						} else if b == voxel.BlockSand {
 							world.QueueSandFall(tx, ty, tz)
@@ -816,10 +914,24 @@ func main() {
 		if player.Mode == mcplayer.GameModeCreative {
 			modeTag = "[CREATIVE]"
 		}
-		controlsText := fmt.Sprintf("%s  |  WASD: Move  |  SPACE: Jump  |  SHIFT/C: Dive  |  L-CLICK: Mine  |  R-CLICK: Place  |  E: Crafting  |  G: Mode  |  F5: Save", modeTag)
+		controlsText := fmt.Sprintf("%s  |  WASD: Move  |  SPACE: Jump  |  L-CLICK: Mine  |  R-CLICK: Place  |  R: Rotate  |  F4: Dist (%d)  |  F5: Save", modeTag, chunkManager.RenderRadius)
 		cLen := rl.MeasureText(controlsText, 12)
 		rl.DrawRectangleRounded(rl.NewRectangle(float32(screenWidth)*0.5-float32(cLen)*0.5-12, 10, float32(cLen)+24, 26), 0.3, 4, rl.NewColor(15, 20, 30, 210))
 		rl.DrawText(controlsText, int32(screenWidth)/2-cLen/2, 16, 12, rl.NewColor(240, 245, 255, 255))
+
+		// Render Distance Toast
+		if renderDistToastTimer > 0 {
+			renderDistToastTimer -= dt
+			alpha := float32(1.0)
+			if renderDistToastTimer < 0.5 {
+				alpha = renderDistToastTimer / 0.5
+			}
+			mLen := rl.MeasureText(renderDistToastMsg, 14)
+			boxW := float32(mLen + 28)
+			boxX := float32(screenWidth)*0.5 - boxW*0.5
+			rl.DrawRectangleRounded(rl.NewRectangle(boxX, 74, boxW, 28), 0.3, 4, rl.NewColor(20, 30, 45, uint8(alpha*220)))
+			rl.DrawText(renderDistToastMsg, int32(boxX)+14, 80, 14, rl.NewColor(120, 230, 255, uint8(alpha*255)))
+		}
 
 		// Save Notification Toast
 		if savedBannerTimer > 0 {

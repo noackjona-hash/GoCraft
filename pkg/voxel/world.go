@@ -566,11 +566,11 @@ func (w *VoxelWorld) generateChunk(cx, cz int) *ChunkData {
 					fz := ncz*ChunkSize + 4 + ((logChance * 3) % 8)
 					fy, _ := GetTerrainHeight(float64(fx), float64(fz))
 					if fy > WaterLevel {
-						logType := BlockOakLog
+						logType := BlockOakLogX
 						if cBiome == BiomeBirchForest {
-							logType = BlockBirchLog
+							logType = BlockBirchLogX
 						} else if cBiome == BiomeTaiga {
-							logType = BlockSpruceLog
+							logType = BlockSpruceLogX
 						}
 						length := 3 + (logChance % 2)
 						for l := 0; l < length; l++ {
@@ -745,7 +745,7 @@ func (w *VoxelWorld) SetBlock(x, y, z int, b BlockType) {
 func (w *VoxelWorld) GetHighestOpaqueBlock(x, z int) int {
 	for y := WorldHeight - 1; y >= 0; y-- {
 		b := w.GetBlock(x, y, z)
-		if b == BlockAir || b == BlockWater || IsLeaf(b) || b == BlockGlass || b == BlockTorch || IsPlant(b) {
+		if b == BlockAir || IsWater(b) || IsLeaf(b) || b == BlockGlass || b == BlockTorch || IsPlant(b) {
 			continue
 		}
 		if BlockRegistry[b].IsSolid {
@@ -897,7 +897,7 @@ func (w *VoxelWorld) GetLightLevel(x, y, z int) (float32, float32) {
 func (w *VoxelWorld) GetHighestBlock(x, z int) int {
 	for y := WorldHeight - 1; y >= 0; y-- {
 		b := w.GetBlock(x, y, z)
-		if b != BlockAir && b != BlockWater {
+		if b != BlockAir && !IsWater(b) {
 			return y
 		}
 	}
@@ -909,30 +909,139 @@ func (w *VoxelWorld) IsSolid(x, y, z int) bool {
 	return BlockRegistry[w.GetBlock(x, y, z)].IsSolid
 }
 
-// SpreadWater simulates natural Minecraft water gravity and horizontal spreading
-func (w *VoxelWorld) SpreadWater(x, y, z int, cm interface{ MarkBlockDirty(x, z int) }) {
-	if y <= 1 || w.GetBlock(x, y, z) != BlockWater {
-		return
-	}
+const (
+	MaxWaterDistance = 5 // Horizontal spread limit from water source
+)
 
-	// 1. Flow directly downwards if air
-	if y > 1 && w.GetBlock(x, y-1, z) == BlockAir {
-		w.SetBlock(x, y-1, z, BlockWater)
-		cm.MarkBlockDirty(x, z)
-		return
+// getWaterDistance returns the distance to the nearest upstream water source
+func (w *VoxelWorld) getWaterDistance(x, y, z int, maxDist int) int {
+	type qNode struct {
+		x, y, z int
+		dist    int
 	}
+	var queue [32]qNode
+	head, tail := 0, 0
 
-	// 2. Spread horizontally into adjacent air blocks
-	dirs := [][2]int{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
-	for _, d := range dirs {
-		nx := x + d[0]
-		nz := z + d[1]
-		if w.GetBlock(nx, y, nz) == BlockAir {
-			w.SetBlock(nx, y, nz, BlockWater)
-			cm.MarkBlockDirty(nx, nz)
-			if y > 1 && w.GetBlock(nx, y-1, nz) == BlockAir {
-				w.SetBlock(nx, y-1, nz, BlockWater)
+	queue[tail] = qNode{x, y, z, 0}
+	tail++
+
+	visited := make(map[[3]int]bool, 32)
+	visited[[3]int{x, y, z}] = true
+
+	for head < tail {
+		curr := queue[head]
+		head++
+
+		b := w.GetBlock(curr.x, curr.y, curr.z)
+		if b == BlockWater {
+			return curr.dist
+		}
+
+		if curr.dist >= maxDist {
+			continue
+		}
+
+		// Water falling directly from above provides source power
+		if curr.y < WorldHeight-1 {
+			upBlock := w.GetBlock(curr.x, curr.y+1, curr.z)
+			if upBlock == BlockWater || upBlock == BlockWaterFlowing {
+				posUp := [3]int{curr.x, curr.y + 1, curr.z}
+				if !visited[posUp] && tail < len(queue) {
+					visited[posUp] = true
+					queue[tail] = qNode{curr.x, curr.y + 1, curr.z, curr.dist}
+					tail++
+				}
 			}
+		}
+
+		// Horizontal neighbors
+		hDirs := [4][2]int{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
+		for _, d := range hDirs {
+			nx, nz := curr.x+d[0], curr.z+d[1]
+			pos := [3]int{nx, curr.y, nz}
+			if !visited[pos] && tail < len(queue) {
+				nb := w.GetBlock(nx, curr.y, nz)
+				if nb == BlockWater || nb == BlockWaterFlowing {
+					visited[pos] = true
+					queue[tail] = qNode{nx, curr.y, nz, curr.dist + 1}
+					tail++
+				}
+			}
+		}
+	}
+
+	return maxDist + 1
+}
+
+// SpreadWater simulates realistic Minecraft liquid dynamics: falling, spreading, receding, and 2x2 infinite sources
+func (w *VoxelWorld) SpreadWater(x, y, z int, cm interface{ MarkBlockDirty(x, z int) }) {
+	if y <= 1 {
+		return
+	}
+
+	currentBlock := w.GetBlock(x, y, z)
+	if !IsWater(currentBlock) {
+		return
+	}
+
+	// 1. Receding Flowing Water: If a flowing water block lost its upstream source, drain it!
+	if currentBlock == BlockWaterFlowing {
+		dist := w.getWaterDistance(x, y, z, MaxWaterDistance)
+		if dist > MaxWaterDistance {
+			w.SetBlock(x, y, z, BlockAir)
+			cm.MarkBlockDirty(x, z)
+			return
+		}
+	}
+
+	// 2. Vertical Waterfall: Flow straight down if below is air or plant
+	if y > 1 {
+		below := w.GetBlock(x, y-1, z)
+		if below == BlockAir || IsPlant(below) || below == BlockTorch {
+			w.SetBlock(x, y-1, z, BlockWaterFlowing)
+			cm.MarkBlockDirty(x, z)
+			return
+		}
+	}
+
+	// 3. Horizontal Spreading (only if supported by a block or water below)
+	below := w.GetBlock(x, y-1, z)
+	if below == BlockAir {
+		return // Do not spread sideways in mid-air fall
+	}
+
+	currentDist := 0
+	if currentBlock == BlockWaterFlowing {
+		currentDist = w.getWaterDistance(x, y, z, MaxWaterDistance)
+		if currentDist >= MaxWaterDistance {
+			return // Reached maximum horizontal flow reach
+		}
+	}
+
+	hDirs := [4][2]int{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
+	for _, d := range hDirs {
+		nx, nz := x+d[0], z+d[1]
+		targetBlock := w.GetBlock(nx, y, nz)
+
+		// Can flow into air, or wash away plants/torches
+		canFlowInto := targetBlock == BlockAir || IsPlant(targetBlock) || targetBlock == BlockTorch
+		if canFlowInto {
+			// Check Infinite Source rule: If target has >= 2 adjacent water sources and solid beneath, become a source!
+			sourceCount := 0
+			if w.IsSolid(nx, y-1, nz) {
+				for _, nd := range hDirs {
+					if w.GetBlock(nx+nd[0], y, nz+nd[1]) == BlockWater {
+						sourceCount++
+					}
+				}
+			}
+
+			if sourceCount >= 2 {
+				w.SetBlock(nx, y, nz, BlockWater) // Form new infinite source block!
+			} else {
+				w.SetBlock(nx, y, nz, BlockWaterFlowing)
+			}
+			cm.MarkBlockDirty(nx, nz)
 		}
 	}
 }
@@ -950,7 +1059,7 @@ func (w *VoxelWorld) QueueSandFall(x, y, z int) {
 		return
 	}
 	below := w.GetBlock(x, y-1, z)
-	if below == BlockAir || below == BlockWater {
+	if below == BlockAir || IsWater(below) {
 		// Avoid duplicate entries
 		for _, u := range w.ScheduledUpdates {
 			if u.X == x && u.Y == y && u.Z == z && u.Action == "fall_sand" {
@@ -1016,13 +1125,13 @@ func (w *VoxelWorld) TickScheduledPhysics(dt float32, cm interface{ MarkBlockDir
 			if action == "fall_sand" {
 				if w.GetBlock(x, y, z) == BlockSand && y > 1 {
 					below := w.GetBlock(x, y-1, z)
-					if below == BlockAir || below == BlockWater {
+					if below == BlockAir || IsWater(below) {
 						w.SetBlock(x, y, z, BlockAir)
 						w.SetBlock(x, y-1, z, BlockSand)
 						cm.MarkBlockDirty(x, z)
 
-						// Continue falling if still air below!
-						if y-1 > 1 && (w.GetBlock(x, y-2, z) == BlockAir || w.GetBlock(x, y-2, z) == BlockWater) {
+						// Continue falling if still air/water below!
+						if y-1 > 1 && (w.GetBlock(x, y-2, z) == BlockAir || IsWater(w.GetBlock(x, y-2, z))) {
 							w.ScheduledUpdates = append(w.ScheduledUpdates, ScheduledUpdate{
 								X: x, Y: y - 1, Z: z,
 								Action: "fall_sand",
