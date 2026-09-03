@@ -232,6 +232,7 @@ func main() {
 	renderDistToastTimer := float32(0)
 	renderDistToastMsg := ""
 	wasInWater := false
+	totalGameTime := float32(0)
 
 	// Main Game Loop
 	for !rl.WindowShouldClose() {
@@ -788,7 +789,13 @@ func main() {
 		}
 
 		// Update GPU Chunk Shader Fog and Minecraft Dynamic Lighting
-		chunkManager.UpdateFogAndSky(skyCol, player.IsSubmerged, player.RLCamera.Position, sunAngle, sunHeight)
+		totalGameTime += dt
+		heldBlock := gui.GetActiveBlock()
+		heldTorchLevel := float32(0)
+		if heldBlock == voxel.BlockTorch {
+			heldTorchLevel = 1.0
+		}
+		chunkManager.UpdateFogAndSky(skyCol, player.IsSubmerged, player.RLCamera.Position, sunAngle, sunHeight, totalGameTime, player.Pos, heldTorchLevel)
 
 		rl.BeginDrawing()
 		rl.ClearBackground(skyCol)

@@ -141,9 +141,13 @@ type BlockDef struct {
 	LightLevel       uint8   // Emitted light level (0 to 15)
 	Hardness         float32 // Mining time
 	DropItem         BlockType
+	RequiredTool     string  // "pickaxe", "axe", "shovel", "sword", or ""
+	RequiredTier     int     // Minimum tool tier to drop: 0=none/fist, 1=wood, 2=stone, 3=iron, 4=diamond
 	IsTool           bool
 	ToolType         string  // "pickaxe", "axe", "shovel", "sword"
-	MiningEfficiency float32 // Speed multiplier (2.0 to 8.0)
+	ToolTier         int     // Tool tier: 1=wood, 2=stone, 3=iron, 4=diamond
+	MaxDurability    int     // Durability uses: 59, 131, 250, 1561
+	MiningEfficiency float32 // Speed multiplier (2.0 to 8.5)
 	AttackDamage     float32
 	IsFood           bool
 	FoodPoints       float32 // Hunger restored (2 to 8)
@@ -275,6 +279,45 @@ func GetBlockDrop(b BlockType) BlockType {
 	return b // Default: drops itself
 }
 
+// GetMiningSpeedAndHarvest returns the mining duration in seconds and whether the block will drop items.
+func GetMiningSpeedAndHarvest(blockType, heldItem BlockType) (float32, bool) {
+	bDef, bExists := BlockRegistry[blockType]
+	if !bExists {
+		return 1.0, true
+	}
+
+	hardness := bDef.Hardness
+	if hardness <= 0.08 {
+		return 0.05, true // Instant break (torches, flowers, plants)
+	}
+	if hardness >= 1000.0 || hardness < 0 {
+		return 999999.0, false // Bedrock is indestructible
+	}
+
+	heldDef, heldExists := BlockRegistry[heldItem]
+	isCorrectTool := heldExists && heldDef.IsTool && heldDef.ToolType == bDef.RequiredTool && bDef.RequiredTool != ""
+
+	if isCorrectTool {
+		speed := heldDef.MiningEfficiency
+		if speed <= 1.0 {
+			speed = 2.0
+		}
+
+		if heldDef.ToolTier >= bDef.RequiredTier {
+			return (hardness * 1.5) / speed, true
+		} else {
+			// Correct tool type (e.g. pickaxe), but too low tier (e.g. wooden pickaxe on diamond ore) -> no drop!
+			return (hardness * 5.0) / speed, false
+		}
+	}
+
+	// Wrong tool or bare hand:
+	// Base time is hardness * 5.0 (slow penalty)
+	// Can only harvest if required tier is 0 (wood, dirt, sand, etc.)
+	canHarvest := (bDef.RequiredTier == 0)
+	return hardness * 5.0, canHarvest
+}
+
 // GetLightOpacity returns how much light is subtracted when passing through the block.
 func GetLightOpacity(b BlockType) uint8 {
 	if b == BlockAir {
@@ -303,54 +346,64 @@ var BlockRegistry = map[BlockType]BlockDef{
 		IsTransparent: true,
 	},
 	BlockGrass: {
-		Type:        BlockGrass,
-		Name:        "Grass Block",
-		TopColor:    rl.NewColor(92, 168, 56, 255),
-		SideColor:   rl.NewColor(134, 96, 67, 255),
-		BottomColor: rl.NewColor(122, 85, 58, 255),
-		IsSolid:     true,
-		Hardness:    0.6,
-		DropItem:    BlockDirt, // Grass drops Dirt!
+		Type:         BlockGrass,
+		Name:         "Grass Block",
+		TopColor:     rl.NewColor(92, 168, 56, 255),
+		SideColor:    rl.NewColor(134, 96, 67, 255),
+		BottomColor:  rl.NewColor(122, 85, 58, 255),
+		IsSolid:      true,
+		Hardness:     0.6,
+		DropItem:     BlockDirt, // Grass drops Dirt!
+		RequiredTool: "shovel",
+		RequiredTier: 0,
 	},
 	BlockDirt: {
-		Type:        BlockDirt,
-		Name:        "Dirt",
-		TopColor:    rl.NewColor(134, 96, 67, 255),
-		SideColor:   rl.NewColor(134, 96, 67, 255),
-		BottomColor: rl.NewColor(134, 96, 67, 255),
-		IsSolid:     true,
-		Hardness:    0.5,
-		DropItem:    BlockDirt,
+		Type:         BlockDirt,
+		Name:         "Dirt",
+		TopColor:     rl.NewColor(134, 96, 67, 255),
+		SideColor:    rl.NewColor(134, 96, 67, 255),
+		BottomColor:  rl.NewColor(134, 96, 67, 255),
+		IsSolid:      true,
+		Hardness:     0.5,
+		DropItem:     BlockDirt,
+		RequiredTool: "shovel",
+		RequiredTier: 0,
 	},
 	BlockStone: {
-		Type:        BlockStone,
-		Name:        "Stone",
-		TopColor:    rl.NewColor(125, 125, 125, 255),
-		SideColor:   rl.NewColor(120, 120, 120, 255),
-		BottomColor: rl.NewColor(115, 115, 115, 255),
-		IsSolid:     true,
-		Hardness:    2.5,
-		DropItem:    BlockCobblestone, // Stone drops Cobblestone!
+		Type:         BlockStone,
+		Name:         "Stone",
+		TopColor:     rl.NewColor(125, 125, 125, 255),
+		SideColor:    rl.NewColor(120, 120, 120, 255),
+		BottomColor:  rl.NewColor(115, 115, 115, 255),
+		IsSolid:      true,
+		Hardness:     1.5,
+		DropItem:     BlockCobblestone, // Stone drops Cobblestone!
+		RequiredTool: "pickaxe",
+		RequiredTier: 1, // Requires Wooden Pickaxe or better
 	},
 	BlockCobblestone: {
-		Type:        BlockCobblestone,
-		Name:        "Cobblestone",
-		TopColor:    rl.NewColor(105, 105, 105, 255),
-		SideColor:   rl.NewColor(95, 95, 95, 255),
-		BottomColor: rl.NewColor(90, 90, 90, 255),
-		IsSolid:     true,
-		Hardness:    2.0,
-		DropItem:    BlockCobblestone,
+		Type:         BlockCobblestone,
+		Name:         "Cobblestone",
+		TopColor:     rl.NewColor(105, 105, 105, 255),
+		SideColor:    rl.NewColor(95, 95, 95, 255),
+		BottomColor:  rl.NewColor(90, 90, 90, 255),
+		IsSolid:      true,
+		Hardness:     2.0,
+		DropItem:     BlockCobblestone,
+		RequiredTool: "pickaxe",
+		RequiredTier: 1,
 	},
 	BlockMossyCobblestone: {
-		Type:        BlockMossyCobblestone,
-		Name:        "Mossy Cobblestone",
-		TopColor:    rl.NewColor(85, 115, 85, 255),
-		SideColor:   rl.NewColor(75, 105, 75, 255),
-		BottomColor: rl.NewColor(70, 95, 70, 255),
-		IsSolid:     true,
-		Hardness:    2.0,
-		DropItem:    BlockMossyCobblestone,
+		Type:         BlockMossyCobblestone,
+		Name:         "Mossy Cobblestone",
+		TopColor:     rl.NewColor(85, 115, 85, 255),
+		SideColor:    rl.NewColor(75, 105, 75, 255),
+		BottomColor:  rl.NewColor(70, 95, 70, 255),
+		IsSolid:      true,
+		Hardness:     2.0,
+		DropItem:     BlockMossyCobblestone,
+		RequiredTool: "pickaxe",
+		RequiredTier: 1,
 	},
 	BlockBedrock: {
 		Type:        BlockBedrock,
@@ -459,22 +512,26 @@ var BlockRegistry = map[BlockType]BlockDef{
 		Hardness:      0.3,
 	},
 	BlockSand: {
-		Type:        BlockSand,
-		Name:        "Sand",
-		TopColor:    rl.NewColor(218, 204, 150, 255),
-		SideColor:   rl.NewColor(210, 195, 140, 255),
-		BottomColor: rl.NewColor(200, 185, 130, 255),
-		IsSolid:     true,
-		Hardness:    0.5,
+		Type:         BlockSand,
+		Name:         "Sand",
+		TopColor:     rl.NewColor(218, 204, 150, 255),
+		SideColor:    rl.NewColor(210, 195, 140, 255),
+		BottomColor:  rl.NewColor(200, 185, 130, 255),
+		IsSolid:      true,
+		Hardness:     0.5,
+		RequiredTool: "shovel",
+		RequiredTier: 0,
 	},
 	BlockSandstone: {
-		Type:        BlockSandstone,
-		Name:        "Sandstone",
-		TopColor:    rl.NewColor(225, 215, 168, 255),
-		SideColor:   rl.NewColor(212, 198, 148, 255),
-		BottomColor: rl.NewColor(198, 185, 136, 255),
-		IsSolid:     true,
-		Hardness:    1.4,
+		Type:         BlockSandstone,
+		Name:         "Sandstone",
+		TopColor:     rl.NewColor(225, 215, 168, 255),
+		SideColor:    rl.NewColor(212, 198, 148, 255),
+		BottomColor:  rl.NewColor(198, 185, 136, 255),
+		IsSolid:      true,
+		Hardness:     1.4,
+		RequiredTool: "pickaxe",
+		RequiredTier: 1,
 	},
 	BlockWater: {
 		Type:          BlockWater,
@@ -501,82 +558,98 @@ var BlockRegistry = map[BlockType]BlockDef{
 		DropItem:      BlockAir,
 	},
 	BlockCoalOre: {
-		Type:        BlockCoalOre,
-		Name:        "Coal Ore",
-		TopColor:    rl.NewColor(115, 115, 115, 255),
-		SideColor:   rl.NewColor(110, 110, 110, 255),
-		BottomColor: rl.NewColor(105, 105, 105, 255),
-		IsSolid:     true,
-		Hardness:    2.5,
-		DropItem:    ItemCoal, // Coal Ore drops Coal item!
+		Type:         BlockCoalOre,
+		Name:         "Coal Ore",
+		TopColor:     rl.NewColor(115, 115, 115, 255),
+		SideColor:    rl.NewColor(110, 110, 110, 255),
+		BottomColor:  rl.NewColor(105, 105, 105, 255),
+		IsSolid:      true,
+		Hardness:     3.0,
+		DropItem:     ItemCoal, // Coal Ore drops Coal item!
+		RequiredTool: "pickaxe",
+		RequiredTier: 1, // Wooden Pickaxe or better
 	},
 	BlockIronOre: {
-		Type:        BlockIronOre,
-		Name:        "Iron Ore",
-		TopColor:    rl.NewColor(125, 120, 115, 255),
-		SideColor:   rl.NewColor(120, 115, 110, 255),
-		BottomColor: rl.NewColor(115, 110, 105, 255),
-		IsSolid:     true,
-		Hardness:    3.0,
-		DropItem:    BlockIronOre, // Iron Ore drops raw Iron Ore (smelted in furnace into Iron Ingot)
+		Type:         BlockIronOre,
+		Name:         "Iron Ore",
+		TopColor:     rl.NewColor(125, 120, 115, 255),
+		SideColor:    rl.NewColor(120, 115, 110, 255),
+		BottomColor:  rl.NewColor(115, 110, 105, 255),
+		IsSolid:      true,
+		Hardness:     3.0,
+		DropItem:     BlockIronOre, // Iron Ore drops raw Iron Ore (smelted in furnace into Iron Ingot)
+		RequiredTool: "pickaxe",
+		RequiredTier: 2, // Requires Stone Pickaxe or better!
 	},
 	BlockGoldOre: {
-		Type:        BlockGoldOre,
-		Name:        "Gold Ore",
-		TopColor:    rl.NewColor(130, 125, 115, 255),
-		SideColor:   rl.NewColor(125, 120, 110, 255),
-		BottomColor: rl.NewColor(120, 115, 105, 255),
-		IsSolid:     true,
-		Hardness:    3.0,
-		DropItem:    BlockGoldOre, // Gold Ore drops raw Gold Ore (smelted in furnace into Gold Ingot)
+		Type:         BlockGoldOre,
+		Name:         "Gold Ore",
+		TopColor:     rl.NewColor(130, 125, 115, 255),
+		SideColor:    rl.NewColor(125, 120, 110, 255),
+		BottomColor:  rl.NewColor(120, 115, 105, 255),
+		IsSolid:      true,
+		Hardness:     3.0,
+		DropItem:     BlockGoldOre, // Gold Ore drops raw Gold Ore (smelted in furnace into Gold Ingot)
+		RequiredTool: "pickaxe",
+		RequiredTier: 3, // Requires Iron Pickaxe or better!
 	},
 	BlockDiamondOre: {
-		Type:        BlockDiamondOre,
-		Name:        "Diamond Ore",
-		TopColor:    rl.NewColor(120, 130, 135, 255),
-		SideColor:   rl.NewColor(115, 125, 130, 255),
-		BottomColor: rl.NewColor(110, 120, 125, 255),
-		IsSolid:     true,
-		Hardness:    3.5,
-		DropItem:    ItemDiamond, // Diamond Ore drops sparkling Diamond!
+		Type:         BlockDiamondOre,
+		Name:         "Diamond Ore",
+		TopColor:     rl.NewColor(120, 130, 135, 255),
+		SideColor:    rl.NewColor(115, 125, 130, 255),
+		BottomColor:  rl.NewColor(110, 120, 125, 255),
+		IsSolid:      true,
+		Hardness:     3.0,
+		DropItem:     ItemDiamond, // Diamond Ore drops sparkling Diamond!
+		RequiredTool: "pickaxe",
+		RequiredTier: 3, // Requires Iron Pickaxe or better!
 	},
 	BlockRedstoneOre: {
-		Type:        BlockRedstoneOre,
-		Name:        "Redstone Ore",
-		TopColor:    rl.NewColor(125, 115, 115, 255),
-		SideColor:   rl.NewColor(120, 110, 110, 255),
-		BottomColor: rl.NewColor(115, 105, 105, 255),
-		IsSolid:     true,
+		Type:          BlockRedstoneOre,
+		Name:          "Redstone Ore",
+		TopColor:      rl.NewColor(125, 115, 115, 255),
+		SideColor:     rl.NewColor(120, 110, 110, 255),
+		BottomColor:   rl.NewColor(115, 105, 105, 255),
+		IsSolid:       true,
 		IsLightSource: true,
-		LightLevel:  9,
-		Hardness:    3.0,
+		LightLevel:    9,
+		Hardness:      3.0,
+		RequiredTool:  "pickaxe",
+		RequiredTier:  3, // Requires Iron Pickaxe or better!
 	},
 	BlockEmeraldOre: {
-		Type:        BlockEmeraldOre,
-		Name:        "Emerald Ore",
-		TopColor:    rl.NewColor(115, 130, 120, 255),
-		SideColor:   rl.NewColor(110, 125, 115, 255),
-		BottomColor: rl.NewColor(105, 120, 110, 255),
-		IsSolid:     true,
-		Hardness:    3.5,
+		Type:         BlockEmeraldOre,
+		Name:         "Emerald Ore",
+		TopColor:     rl.NewColor(115, 130, 120, 255),
+		SideColor:    rl.NewColor(110, 125, 115, 255),
+		BottomColor:  rl.NewColor(105, 120, 110, 255),
+		IsSolid:      true,
+		Hardness:     3.0,
+		RequiredTool: "pickaxe",
+		RequiredTier: 3, // Requires Iron Pickaxe or better!
 	},
 	BlockLapisOre: {
-		Type:        BlockLapisOre,
-		Name:        "Lapis Lazuli Ore",
-		TopColor:    rl.NewColor(115, 120, 135, 255),
-		SideColor:   rl.NewColor(110, 115, 130, 255),
-		BottomColor: rl.NewColor(105, 110, 125, 255),
-		IsSolid:     true,
-		Hardness:    3.0,
+		Type:         BlockLapisOre,
+		Name:         "Lapis Lazuli Ore",
+		TopColor:     rl.NewColor(115, 120, 135, 255),
+		SideColor:    rl.NewColor(110, 115, 130, 255),
+		BottomColor:  rl.NewColor(105, 110, 125, 255),
+		IsSolid:      true,
+		Hardness:     3.0,
+		RequiredTool: "pickaxe",
+		RequiredTier: 2, // Requires Stone Pickaxe or better!
 	},
 	BlockBricks: {
-		Type:        BlockBricks,
-		Name:        "Bricks",
-		TopColor:    rl.NewColor(155, 78, 62, 255),
-		SideColor:   rl.NewColor(148, 72, 56, 255),
-		BottomColor: rl.NewColor(140, 68, 52, 255),
-		IsSolid:     true,
-		Hardness:    2.0,
+		Type:         BlockBricks,
+		Name:         "Bricks",
+		TopColor:     rl.NewColor(155, 78, 62, 255),
+		SideColor:    rl.NewColor(148, 72, 56, 255),
+		BottomColor:  rl.NewColor(140, 68, 52, 255),
+		IsSolid:      true,
+		Hardness:     2.0,
+		RequiredTool: "pickaxe",
+		RequiredTier: 1,
 	},
 	BlockTNT: {
 		Type:        BlockTNT,
@@ -609,24 +682,29 @@ var BlockRegistry = map[BlockType]BlockDef{
 		Hardness:      0.05,
 	},
 	BlockFurnace: {
-		Type:        BlockFurnace,
-		Name:        "Furnace",
-		TopColor:    rl.NewColor(125, 125, 125, 255),
-		SideColor:   rl.NewColor(105, 105, 105, 255),
-		BottomColor: rl.NewColor(100, 100, 100, 255),
-		IsSolid:     true,
+		Type:          BlockFurnace,
+		Name:          "Furnace",
+		TopColor:      rl.NewColor(125, 125, 125, 255),
+		SideColor:     rl.NewColor(105, 105, 105, 255),
+		BottomColor:   rl.NewColor(100, 100, 100, 255),
+		IsSolid:       true,
 		IsLightSource: true,
-		LightLevel:  13,
-		Hardness:    2.5,
+		LightLevel:    13,
+		Hardness:      3.5,
+		RequiredTool:  "pickaxe",
+		RequiredTier:  1,
 	},
 	BlockBookshelf: {
-		Type:        BlockBookshelf,
-		Name:        "Bookshelf",
-		TopColor:    rl.NewColor(162, 130, 78, 255),
-		SideColor:   rl.NewColor(145, 110, 68, 255),
-		BottomColor: rl.NewColor(150, 118, 68, 255),
-		IsSolid:     true,
-		Hardness:    1.5,
+		Type:         BlockBookshelf,
+		Name:         "Bookshelf",
+		TopColor:     rl.NewColor(162, 130, 78, 255),
+		SideColor:    rl.NewColor(145, 110, 68, 255),
+		BottomColor:  rl.NewColor(150, 118, 68, 255),
+		IsSolid:      true,
+		Hardness:     1.5,
+		DropItem:     BlockOakPlanks, // Drops planks
+		RequiredTool: "axe",
+		RequiredTier: 0,
 	},
 
 	// --- SPRUCE WOOD ---
@@ -867,6 +945,8 @@ var BlockRegistry = map[BlockType]BlockDef{
 		SideColor:        rl.NewColor(140, 105, 55, 255),
 		IsTool:           true,
 		ToolType:         "pickaxe",
+		ToolTier:         1,
+		MaxDurability:    59,
 		MiningEfficiency: 2.0,
 		AttackDamage:     2.0,
 	},
@@ -877,6 +957,8 @@ var BlockRegistry = map[BlockType]BlockDef{
 		SideColor:        rl.NewColor(140, 105, 55, 255),
 		IsTool:           true,
 		ToolType:         "axe",
+		ToolTier:         1,
+		MaxDurability:    59,
 		MiningEfficiency: 2.0,
 		AttackDamage:     3.0,
 	},
@@ -887,6 +969,8 @@ var BlockRegistry = map[BlockType]BlockDef{
 		SideColor:        rl.NewColor(140, 105, 55, 255),
 		IsTool:           true,
 		ToolType:         "shovel",
+		ToolTier:         1,
+		MaxDurability:    59,
 		MiningEfficiency: 2.0,
 		AttackDamage:     1.5,
 	},
@@ -897,6 +981,8 @@ var BlockRegistry = map[BlockType]BlockDef{
 		SideColor:        rl.NewColor(140, 105, 55, 255),
 		IsTool:           true,
 		ToolType:         "sword",
+		ToolTier:         1,
+		MaxDurability:    59,
 		MiningEfficiency: 1.5,
 		AttackDamage:     4.0,
 	},
@@ -909,6 +995,8 @@ var BlockRegistry = map[BlockType]BlockDef{
 		SideColor:        rl.NewColor(115, 115, 115, 255),
 		IsTool:           true,
 		ToolType:         "pickaxe",
+		ToolTier:         2,
+		MaxDurability:    131,
 		MiningEfficiency: 4.0,
 		AttackDamage:     3.0,
 	},
@@ -919,6 +1007,8 @@ var BlockRegistry = map[BlockType]BlockDef{
 		SideColor:        rl.NewColor(115, 115, 115, 255),
 		IsTool:           true,
 		ToolType:         "axe",
+		ToolTier:         2,
+		MaxDurability:    131,
 		MiningEfficiency: 4.0,
 		AttackDamage:     4.0,
 	},
@@ -929,6 +1019,8 @@ var BlockRegistry = map[BlockType]BlockDef{
 		SideColor:        rl.NewColor(115, 115, 115, 255),
 		IsTool:           true,
 		ToolType:         "shovel",
+		ToolTier:         2,
+		MaxDurability:    131,
 		MiningEfficiency: 4.0,
 		AttackDamage:     2.5,
 	},
@@ -939,6 +1031,8 @@ var BlockRegistry = map[BlockType]BlockDef{
 		SideColor:        rl.NewColor(115, 115, 115, 255),
 		IsTool:           true,
 		ToolType:         "sword",
+		ToolTier:         2,
+		MaxDurability:    131,
 		MiningEfficiency: 2.0,
 		AttackDamage:     5.0,
 	},
@@ -951,6 +1045,8 @@ var BlockRegistry = map[BlockType]BlockDef{
 		SideColor:        rl.NewColor(205, 205, 205, 255),
 		IsTool:           true,
 		ToolType:         "pickaxe",
+		ToolTier:         3,
+		MaxDurability:    250,
 		MiningEfficiency: 6.0,
 		AttackDamage:     4.0,
 	},
@@ -961,6 +1057,8 @@ var BlockRegistry = map[BlockType]BlockDef{
 		SideColor:        rl.NewColor(205, 205, 205, 255),
 		IsTool:           true,
 		ToolType:         "axe",
+		ToolTier:         3,
+		MaxDurability:    250,
 		MiningEfficiency: 6.0,
 		AttackDamage:     5.0,
 	},
@@ -971,6 +1069,8 @@ var BlockRegistry = map[BlockType]BlockDef{
 		SideColor:        rl.NewColor(205, 205, 205, 255),
 		IsTool:           true,
 		ToolType:         "shovel",
+		ToolTier:         3,
+		MaxDurability:    250,
 		MiningEfficiency: 6.0,
 		AttackDamage:     3.5,
 	},
@@ -981,6 +1081,8 @@ var BlockRegistry = map[BlockType]BlockDef{
 		SideColor:        rl.NewColor(205, 205, 205, 255),
 		IsTool:           true,
 		ToolType:         "sword",
+		ToolTier:         3,
+		MaxDurability:    250,
 		MiningEfficiency: 2.5,
 		AttackDamage:     6.0,
 	},
@@ -993,6 +1095,8 @@ var BlockRegistry = map[BlockType]BlockDef{
 		SideColor:        rl.NewColor(80, 220, 230, 255),
 		IsTool:           true,
 		ToolType:         "pickaxe",
+		ToolTier:         4,
+		MaxDurability:    1561,
 		MiningEfficiency: 8.5,
 		AttackDamage:     5.0,
 	},
@@ -1003,6 +1107,8 @@ var BlockRegistry = map[BlockType]BlockDef{
 		SideColor:        rl.NewColor(80, 220, 230, 255),
 		IsTool:           true,
 		ToolType:         "axe",
+		ToolTier:         4,
+		MaxDurability:    1561,
 		MiningEfficiency: 8.5,
 		AttackDamage:     6.0,
 	},
@@ -1013,6 +1119,8 @@ var BlockRegistry = map[BlockType]BlockDef{
 		SideColor:        rl.NewColor(80, 220, 230, 255),
 		IsTool:           true,
 		ToolType:         "shovel",
+		ToolTier:         4,
+		MaxDurability:    1561,
 		MiningEfficiency: 8.5,
 		AttackDamage:     4.5,
 	},
@@ -1023,6 +1131,8 @@ var BlockRegistry = map[BlockType]BlockDef{
 		SideColor:        rl.NewColor(80, 220, 230, 255),
 		IsTool:           true,
 		ToolType:         "sword",
+		ToolTier:         4,
+		MaxDurability:    1561,
 		MiningEfficiency: 3.0,
 		AttackDamage:     7.0,
 	},
@@ -1038,13 +1148,16 @@ var BlockRegistry = map[BlockType]BlockDef{
 		Hardness:    0.8,
 	},
 	BlockObsidian: {
-		Type:        BlockObsidian,
-		Name:        "Obsidian",
-		TopColor:    rl.NewColor(20, 15, 30, 255),
-		SideColor:   rl.NewColor(15, 10, 25, 255),
-		BottomColor: rl.NewColor(15, 10, 25, 255),
-		IsSolid:     true,
-		Hardness:    9.0,
+		Type:         BlockObsidian,
+		Name:         "Obsidian",
+		TopColor:     rl.NewColor(20, 15, 30, 255),
+		SideColor:    rl.NewColor(15, 10, 25, 255),
+		BottomColor:  rl.NewColor(15, 10, 25, 255),
+		IsSolid:      true,
+		Hardness:     50.0,
+		DropItem:     BlockObsidian,
+		RequiredTool: "pickaxe",
+		RequiredTier: 4, // Requires Diamond Pickaxe!
 	},
 
 	// --- FOOD ITEMS ---
