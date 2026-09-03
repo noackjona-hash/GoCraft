@@ -500,7 +500,7 @@ func (cm *ChunkManager) RebuildChunkMeshes(c *Chunk) {
 				var mb *MeshBuilder
 				if bType == BlockWater {
 					mb = cm.WaterMB
-				} else if bType == BlockOakLeaves || bType == BlockGlass || bType == BlockTorch {
+				} else if IsLeaf(bType) || bType == BlockGlass || bType == BlockTorch || IsPlant(bType) {
 					mb = cm.CutoutMB
 				} else {
 					mb = cm.OpaqueMB
@@ -562,6 +562,44 @@ func (cm *ChunkManager) RebuildChunkMeshes(c *Chunk) {
 					continue
 				}
 
+				// --- AUTHENTIC MINECRAFT CROSSED-QUADS PLANT RENDERING ---
+				if IsPlant(bType) {
+					uMin, vMin, uMax, vMax := GetBlockTextureUVs(bType, FaceNorth)
+					skyLight, torchLight := lightMap.GetLight(x, y, z)
+					pCol := calculateMinecraftVertexColor(skyLight, torchLight, 1.0, 0.92)
+					plantNorm := rl.Vector3{X: 0, Y: 1, Z: 0}
+
+					cx := x0 + 0.5
+					cz := z0 + 0.5
+					h := float32(1.0)
+					if bType == BlockRedMushroom || bType == BlockBrownMushroom {
+						h = 0.65
+					} else if bType == BlockDandelion || bType == BlockPoppy || bType == BlockCornflower || bType == BlockAllium {
+						h = 0.85
+					}
+					wHalf := float32(0.45)
+
+					// Diagonal Quad 1
+					mb.AddQuad(
+						rl.Vector3{X: cx - wHalf, Y: y0, Z: cz - wHalf},
+						rl.Vector3{X: cx + wHalf, Y: y0, Z: cz + wHalf},
+						rl.Vector3{X: cx + wHalf, Y: y0 + h, Z: cz + wHalf},
+						rl.Vector3{X: cx - wHalf, Y: y0 + h, Z: cz - wHalf},
+						plantNorm,
+						uMin, vMin, uMax, vMax, pCol, pCol, pCol, pCol, false,
+					)
+					// Diagonal Quad 2
+					mb.AddQuad(
+						rl.Vector3{X: cx - wHalf, Y: y0, Z: cz + wHalf},
+						rl.Vector3{X: cx + wHalf, Y: y0, Z: cz - wHalf},
+						rl.Vector3{X: cx + wHalf, Y: y0 + h, Z: cz - wHalf},
+						rl.Vector3{X: cx - wHalf, Y: y0 + h, Z: cz + wHalf},
+						plantNorm,
+						uMin, vMin, uMax, vMax, pCol, pCol, pCol, pCol, false,
+					)
+					continue
+				}
+
 				// --- NEIGHBOR OCCLUSION & WATER CULLING ---
 				topBlock := BlockAir
 				if y < WorldHeight-1 {
@@ -593,6 +631,14 @@ func (cm *ChunkManager) RebuildChunkMeshes(c *Chunk) {
 					southAir = southBlock != BlockGlass && BlockRegistry[southBlock].IsTransparent
 					westAir = westBlock != BlockGlass && BlockRegistry[westBlock].IsTransparent
 					eastAir = eastBlock != BlockGlass && BlockRegistry[eastBlock].IsTransparent
+				} else if IsLeaf(bType) {
+					// Intelligent leaf culling: cull interior faces between same leaves or opaque blocks
+					topAir = y == WorldHeight-1 || (topBlock != bType && (BlockRegistry[topBlock].IsTransparent || !BlockRegistry[topBlock].IsSolid))
+					bottomAir = y > 0 && (bottomBlock != bType && (BlockRegistry[bottomBlock].IsTransparent || !BlockRegistry[bottomBlock].IsSolid))
+					northAir = northBlock != bType && (BlockRegistry[northBlock].IsTransparent || !BlockRegistry[northBlock].IsSolid)
+					southAir = southBlock != bType && (BlockRegistry[southBlock].IsTransparent || !BlockRegistry[southBlock].IsSolid)
+					westAir = westBlock != bType && (BlockRegistry[westBlock].IsTransparent || !BlockRegistry[westBlock].IsSolid)
+					eastAir = eastBlock != bType && (BlockRegistry[eastBlock].IsTransparent || !BlockRegistry[eastBlock].IsSolid)
 				} else {
 					topAir = y == WorldHeight-1 || BlockRegistry[topBlock].IsTransparent
 					bottomAir = y > 0 && BlockRegistry[bottomBlock].IsTransparent

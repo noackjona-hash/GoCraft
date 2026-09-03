@@ -28,6 +28,36 @@ func init() {
 			Pattern: []voxel.BlockType{voxel.BlockOakLog},
 			Output:  ItemStack{Type: voxel.BlockOakPlanks, Count: 4},
 		},
+		{
+			Width:   1,
+			Height:  1,
+			Pattern: []voxel.BlockType{voxel.BlockBirchLog},
+			Output:  ItemStack{Type: voxel.BlockOakPlanks, Count: 4},
+		},
+		{
+			Width:   1,
+			Height:  1,
+			Pattern: []voxel.BlockType{voxel.BlockSpruceLog},
+			Output:  ItemStack{Type: voxel.BlockSprucePlanks, Count: 4},
+		},
+		{
+			Width:  1,
+			Height: 2,
+			Pattern: []voxel.BlockType{
+				voxel.BlockSprucePlanks,
+				voxel.BlockSprucePlanks,
+			},
+			Output: ItemStack{Type: voxel.ItemStick, Count: 4},
+		},
+		{
+			Width:  2,
+			Height: 2,
+			Pattern: []voxel.BlockType{
+				voxel.BlockSprucePlanks, voxel.BlockSprucePlanks,
+				voxel.BlockSprucePlanks, voxel.BlockSprucePlanks,
+			},
+			Output: ItemStack{Type: voxel.BlockCraftingTable, Count: 1},
+		},
 		// 2. 2 Planks (1x2 vertical) -> 4 Sticks
 		{
 			Width:  1,

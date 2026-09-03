@@ -210,6 +210,30 @@ func stitchResourcePack(img *rl.Image, blockDir, itemDir string, tileSize int32)
 		"torch_on.png":                {{0, 2}},
 		"water_still.png":             {{1, 2}},
 		"water_flow.png":              {{1, 2}},
+		"spruce_log.png":              {{2, 2}},
+		"spruce_log_top.png":          {{3, 2}},
+		"spruce_leaves.png":           {{4, 2}},
+		"spruce_planks.png":           {{5, 2}},
+		"dandelion.png":               {{6, 2}},
+		"poppy.png":                   {{7, 2}},
+		"cornflower.png":              {{8, 2}},
+		"birch_log.png":               {{9, 2}},
+		"birch_log_top.png":           {{10, 2}},
+		"birch_leaves.png":            {{11, 2}},
+		"allium.png":                  {{12, 2}},
+		"grass.png":                   {{13, 2}},
+		"dead_bush.png":               {{14, 2}},
+		"cactus_side.png":             {{15, 2}},
+		"cactus_top.png":              {{11, 5}},
+		"cactus_bottom.png":           {{12, 5}},
+		"sugar_cane.png":              {{13, 5}},
+		"red_mushroom.png":            {{14, 5}},
+		"brown_mushroom.png":          {{15, 5}},
+		"pumpkin_side.png":            {{0, 6}},
+		"pumpkin_top.png":             {{1, 6}},
+		"gravel.png":                  {{2, 6}},
+		"clay.png":                    {{3, 6}},
+		"snow.png":                    {{4, 6}},
 		"white_wool.png":              {{5, 4}},
 		"wool.png":                    {{5, 4}},
 		"obsidian.png":                {{6, 4}},
@@ -325,11 +349,15 @@ func stitchResourcePack(img *rl.Image, blockDir, itemDir string, tileSize int32)
 			}
 			tile := loadTile(path)
 			if tile != nil {
-				// Biome Tinting for Grass Top and Leaves
-				if strings.Contains(fileName, "grass") && strings.Contains(fileName, "top") {
+				// Biome Tinting for Grass Top, Grass Tufts, and Leaves
+				if (strings.Contains(fileName, "grass") && strings.Contains(fileName, "top")) || fileName == "grass.png" {
 					rl.ImageColorTint(tile, rl.NewColor(92, 168, 56, 255)) // Lush Grass Green
+				} else if strings.Contains(fileName, "birch_leaves") {
+					rl.ImageColorTint(tile, rl.NewColor(128, 180, 56, 255)) // Birch Leaf Warmer Green
+				} else if strings.Contains(fileName, "spruce_leaves") {
+					rl.ImageColorTint(tile, rl.NewColor(50, 115, 65, 255)) // Spruce Leaf Deep Pine Green
 				} else if strings.Contains(fileName, "leaves") {
-					rl.ImageColorTint(tile, rl.NewColor(58, 140, 32, 255)) // Forest Leaf Green
+					rl.ImageColorTint(tile, rl.NewColor(58, 140, 32, 255)) // Forest Oak Leaf Green
 				}
 
 				for _, gridPos := range gridPositions {

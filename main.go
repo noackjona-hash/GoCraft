@@ -449,7 +449,7 @@ func main() {
 							audioEngine.TriggerBlockBreak()
 
 							// Tree Leaf Decay when log is broken!
-							if brokenType == voxel.BlockOakLog {
+							if voxel.IsLog(brokenType) {
 								world.QueueLeafDecay(bx, by, bz)
 							}
 

@@ -1,6 +1,8 @@
 package voxel
 
 import (
+	"math/rand"
+
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
@@ -39,6 +41,33 @@ const (
 	BlockMossyCobblestone
 	BlockWool
 	BlockObsidian
+
+	// Spruce Wood (Taiga)
+	BlockSpruceLog
+	BlockSprucePlanks
+	BlockSpruceLeaves
+
+	// Wildflowers
+	BlockDandelion
+	BlockPoppy
+	BlockCornflower
+	BlockAllium
+
+	// Surface Foliage & Desert Plants
+	BlockTallGrass
+	BlockDeadBush
+	BlockCactus
+	BlockSugarCane
+
+	// Nature & Special Blocks
+	BlockPumpkin
+	BlockRedMushroom
+	BlockBrownMushroom
+
+	// Terrain & Mineral Deposits
+	BlockGravel
+	BlockClay
+	BlockSnow
 
 	// Items & Materials
 	ItemStick
@@ -106,13 +135,39 @@ type BlockDef struct {
 	Saturation       float32
 }
 
+// IsPlant returns true if block is rendered as crossed quads foliage
+func IsPlant(b BlockType) bool {
+	return b == BlockDandelion || b == BlockPoppy || b == BlockCornflower || b == BlockAllium ||
+		b == BlockTallGrass || b == BlockDeadBush || b == BlockSugarCane ||
+		b == BlockRedMushroom || b == BlockBrownMushroom
+}
+
+// IsLeaf returns true for any tree leaves
+func IsLeaf(b BlockType) bool {
+	return b == BlockOakLeaves || b == BlockBirchLeaves || b == BlockSpruceLeaves
+}
+
+// IsLog returns true for any tree log
+func IsLog(b BlockType) bool {
+	return b == BlockOakLog || b == BlockBirchLog || b == BlockSpruceLog
+}
+
 // GetBlockDrop returns the item dropped when a block is mined
 func GetBlockDrop(b BlockType) BlockType {
 	if def, exists := BlockRegistry[b]; exists && def.DropItem != BlockAir {
 		return def.DropItem
 	}
-	if b == BlockOakLeaves || b == BlockBirchLeaves || b == BlockGlass || b == BlockWater || b == BlockBedrock {
+	if IsLeaf(b) || b == BlockGlass || b == BlockWater || b == BlockBedrock {
+		if b == BlockOakLeaves && rand.Float32() < 0.05 {
+			return ItemApple
+		}
+		if rand.Float32() < 0.08 {
+			return ItemStick
+		}
 		return BlockAir
+	}
+	if b == BlockTallGrass {
+		return BlockAir // Tall grass occasionally drops seeds in vanilla, or air
 	}
 	return b // Default: drops itself
 }
@@ -129,10 +184,10 @@ func GetLightOpacity(b BlockType) uint8 {
 	if b == BlockWater {
 		return 3 // Water absorbs 3 light levels per block
 	}
-	if b == BlockOakLeaves || b == BlockBirchLeaves {
+	if IsLeaf(b) {
 		return 2 // Leaves absorb 2 light levels per block
 	}
-	// Glass, Torches, etc.
+	// Glass, Torches, Flowers, Grass, etc.
 	return 1
 }
 
@@ -415,6 +470,179 @@ var BlockRegistry = map[BlockType]BlockDef{
 		BottomColor: rl.NewColor(150, 118, 68, 255),
 		IsSolid:     true,
 		Hardness:    1.5,
+	},
+
+	// --- SPRUCE WOOD ---
+	BlockSpruceLog: {
+		Type:        BlockSpruceLog,
+		Name:        "Spruce Log",
+		TopColor:    rl.NewColor(110, 85, 55, 255),
+		SideColor:   rl.NewColor(60, 45, 30, 255),
+		BottomColor: rl.NewColor(110, 85, 55, 255),
+		IsSolid:     true,
+		Hardness:    2.0,
+	},
+	BlockSprucePlanks: {
+		Type:        BlockSprucePlanks,
+		Name:        "Spruce Planks",
+		TopColor:    rl.NewColor(115, 85, 55, 255),
+		SideColor:   rl.NewColor(110, 80, 50, 255),
+		BottomColor: rl.NewColor(105, 75, 45, 255),
+		IsSolid:     true,
+		Hardness:    1.2,
+	},
+	BlockSpruceLeaves: {
+		Type:          BlockSpruceLeaves,
+		Name:          "Spruce Leaves",
+		TopColor:      rl.NewColor(50, 85, 50, 255),
+		SideColor:     rl.NewColor(45, 80, 45, 255),
+		BottomColor:   rl.NewColor(40, 75, 40, 255),
+		IsSolid:       true,
+		IsTransparent: true,
+		Hardness:      0.2,
+	},
+
+	// --- WILDFLOWERS ---
+	BlockDandelion: {
+		Type:          BlockDandelion,
+		Name:          "Dandelion",
+		TopColor:      rl.NewColor(255, 240, 50, 255),
+		SideColor:     rl.NewColor(255, 240, 50, 255),
+		BottomColor:   rl.NewColor(255, 240, 50, 255),
+		IsSolid:       false,
+		IsTransparent: true,
+		Hardness:      0.05,
+	},
+	BlockPoppy: {
+		Type:          BlockPoppy,
+		Name:          "Poppy",
+		TopColor:      rl.NewColor(230, 40, 40, 255),
+		SideColor:     rl.NewColor(230, 40, 40, 255),
+		BottomColor:   rl.NewColor(230, 40, 40, 255),
+		IsSolid:       false,
+		IsTransparent: true,
+		Hardness:      0.05,
+	},
+	BlockCornflower: {
+		Type:          BlockCornflower,
+		Name:          "Cornflower",
+		TopColor:      rl.NewColor(70, 130, 240, 255),
+		SideColor:     rl.NewColor(70, 130, 240, 255),
+		BottomColor:   rl.NewColor(70, 130, 240, 255),
+		IsSolid:       false,
+		IsTransparent: true,
+		Hardness:      0.05,
+	},
+	BlockAllium: {
+		Type:          BlockAllium,
+		Name:          "Allium",
+		TopColor:      rl.NewColor(180, 130, 210, 255),
+		SideColor:     rl.NewColor(180, 130, 210, 255),
+		BottomColor:   rl.NewColor(180, 130, 210, 255),
+		IsSolid:       false,
+		IsTransparent: true,
+		Hardness:      0.05,
+	},
+
+	// --- FOLIAGE & DESERT PLANTS ---
+	BlockTallGrass: {
+		Type:          BlockTallGrass,
+		Name:          "Grass",
+		TopColor:      rl.NewColor(92, 168, 56, 255),
+		SideColor:     rl.NewColor(92, 168, 56, 255),
+		BottomColor:   rl.NewColor(92, 168, 56, 255),
+		IsSolid:       false,
+		IsTransparent: true,
+		Hardness:      0.05,
+	},
+	BlockDeadBush: {
+		Type:          BlockDeadBush,
+		Name:          "Dead Bush",
+		TopColor:      rl.NewColor(145, 110, 65, 255),
+		SideColor:     rl.NewColor(145, 110, 65, 255),
+		BottomColor:   rl.NewColor(145, 110, 65, 255),
+		IsSolid:       false,
+		IsTransparent: true,
+		Hardness:      0.05,
+	},
+	BlockCactus: {
+		Type:        BlockCactus,
+		Name:        "Cactus",
+		TopColor:    rl.NewColor(65, 125, 45, 255),
+		SideColor:   rl.NewColor(55, 115, 38, 255),
+		BottomColor: rl.NewColor(45, 105, 30, 255),
+		IsSolid:     true,
+		Hardness:    0.4,
+	},
+	BlockSugarCane: {
+		Type:          BlockSugarCane,
+		Name:          "Sugar Cane",
+		TopColor:      rl.NewColor(135, 185, 75, 255),
+		SideColor:     rl.NewColor(135, 185, 75, 255),
+		BottomColor:   rl.NewColor(135, 185, 75, 255),
+		IsSolid:       false,
+		IsTransparent: true,
+		Hardness:      0.05,
+	},
+
+	// --- NATURE & SPECIALS ---
+	BlockPumpkin: {
+		Type:        BlockPumpkin,
+		Name:        "Pumpkin",
+		TopColor:    rl.NewColor(215, 135, 35, 255),
+		SideColor:   rl.NewColor(205, 125, 28, 255),
+		BottomColor: rl.NewColor(195, 115, 20, 255),
+		IsSolid:     true,
+		Hardness:    1.0,
+	},
+	BlockRedMushroom: {
+		Type:          BlockRedMushroom,
+		Name:          "Red Mushroom",
+		TopColor:      rl.NewColor(230, 50, 45, 255),
+		SideColor:     rl.NewColor(230, 50, 45, 255),
+		BottomColor:   rl.NewColor(230, 50, 45, 255),
+		IsSolid:       false,
+		IsTransparent: true,
+		Hardness:      0.05,
+	},
+	BlockBrownMushroom: {
+		Type:          BlockBrownMushroom,
+		Name:          "Brown Mushroom",
+		TopColor:      rl.NewColor(165, 125, 90, 255),
+		SideColor:     rl.NewColor(165, 125, 90, 255),
+		BottomColor:   rl.NewColor(165, 125, 90, 255),
+		IsSolid:       false,
+		IsTransparent: true,
+		Hardness:      0.05,
+	},
+
+	// --- TERRAIN & MINERAL DEPOSITS ---
+	BlockGravel: {
+		Type:        BlockGravel,
+		Name:        "Gravel",
+		TopColor:    rl.NewColor(135, 130, 130, 255),
+		SideColor:   rl.NewColor(130, 125, 125, 255),
+		BottomColor: rl.NewColor(125, 120, 120, 255),
+		IsSolid:     true,
+		Hardness:    0.6,
+	},
+	BlockClay: {
+		Type:        BlockClay,
+		Name:        "Clay",
+		TopColor:    rl.NewColor(160, 165, 175, 255),
+		SideColor:   rl.NewColor(155, 160, 170, 255),
+		BottomColor: rl.NewColor(150, 155, 165, 255),
+		IsSolid:     true,
+		Hardness:    0.6,
+	},
+	BlockSnow: {
+		Type:        BlockSnow,
+		Name:        "Snow Block",
+		TopColor:    rl.NewColor(245, 250, 255, 255),
+		SideColor:   rl.NewColor(240, 245, 250, 255),
+		BottomColor: rl.NewColor(235, 240, 245, 255),
+		IsSolid:     true,
+		Hardness:    0.3,
 	},
 
 	// --- BASIC ITEMS ---
