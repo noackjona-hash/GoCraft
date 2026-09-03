@@ -313,6 +313,9 @@ func main() {
 			miningCrunchTimer += dt
 			if miningCrunchTimer >= 0.22 {
 				audioEngine.TriggerBlockBreak()
+				eatPos := rl.Vector3Add(player.RLCamera.Position, rl.Vector3Scale(lookDir, 0.4))
+				eatPos.Y -= 0.2 // Slightly lower for the mouth
+				player.SpawnBlockBreakParticles(eatPos, heldItem) // eating particles!
 				miningCrunchTimer = 0
 			}
 			if player.EatingTimer >= 1.4 {
@@ -327,6 +330,9 @@ func main() {
 				gui.ConsumeActiveItem()
 				player.EatingTimer = 0
 				audioEngine.TriggerBlockBreak()
+				eatPos := rl.Vector3Add(player.RLCamera.Position, rl.Vector3Scale(lookDir, 0.4))
+				eatPos.Y -= 0.2
+				player.SpawnBlockBreakParticles(eatPos, heldItem)
 			}
 		} else if player.EatingTimer > 0 && !rl.IsMouseButtonDown(rl.MouseButtonRight) {
 			player.EatingTimer = 0
@@ -464,30 +470,6 @@ func main() {
 		if !isMenuOpen {
 			heldBlock := gui.GetActiveBlock()
 			bDef := voxel.BlockRegistry[heldBlock]
-
-			// Hold right click to eat food
-			if bDef.IsFood && rl.IsMouseButtonDown(rl.MouseButtonRight) {
-				if player.EatingTimer == 0 {
-					player.EatingTimer = 1.4 // 1.4 seconds to eat
-				}
-				player.EatingTimer -= dt
-				// Play chew sound periodically
-				if int(player.EatingTimer*10)%3 == 0 {
-					audioEngine.TriggerBlockPlace() // temp chew sound
-				}
-				if player.EatingTimer <= 0 {
-					player.EatingTimer = 0
-					player.Health += float32(bDef.FoodPoints)
-					if player.Health > 20.0 {
-						player.Health = 20.0
-					}
-					if player.Mode == mcplayer.GameModeSurvival {
-						gui.ConsumeActiveItem()
-					}
-				}
-			} else {
-				player.EatingTimer = 0
-			}
 
 			// Right Click: Interact with Crafting Table, Furnace, or Place Block
 			if rl.IsMouseButtonPressed(rl.MouseButtonRight) && !bDef.IsFood {
@@ -686,7 +668,7 @@ func main() {
 		}
 
 		// 6. Block Break Particles
-		player.RenderParticles()
+		player.RenderParticles(atlas)
 
 		// 7. 3D Steve Character Model (Rendered in 3rd Person views)
 		player.Render3DSteveModel()

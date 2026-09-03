@@ -2,6 +2,7 @@ package mcplayer
 
 import (
 	"math"
+	"math/rand"
 
 	"gocraft/pkg/voxel"
 	rl "github.com/gen2brain/raylib-go/raylib"
@@ -208,12 +209,13 @@ type MCPlayer struct {
 
 // BlockParticle represents a small flying 3D voxel cube particle.
 type BlockParticle struct {
-	Pos     rl.Vector3
-	Vel     rl.Vector3
-	Color   rl.Color
-	Life    float32
-	MaxLife float32
-	Size    float32
+	Pos       rl.Vector3
+	Vel       rl.Vector3
+	Color     rl.Color
+	SourceRec rl.Rectangle
+	Life      float32
+	MaxLife   float32
+	Size      float32
 }
 
 // ---------------------------------------------------------------------------
@@ -276,11 +278,7 @@ func (p *MCPlayer) TriggerSwing() {
 
 // SpawnBlockBreakParticles creates bursting block voxel debris.
 func (p *MCPlayer) SpawnBlockBreakParticles(pos rl.Vector3, bType voxel.BlockType) {
-	bDef := voxel.BlockRegistry[bType]
-	colors := []rl.Color{bDef.TopColor, bDef.SideColor, bDef.BottomColor}
-
 	for i := 0; i < 16; i++ {
-		col := colors[i%len(colors)]
 		rx := float32(i%4)*0.22 - 0.33
 		ry := float32((i/4)%4)*0.22 - 0.33
 		rz := float32((i*7)%4)*0.22 - 0.33
@@ -289,13 +287,20 @@ func (p *MCPlayer) SpawnBlockBreakParticles(pos rl.Vector3, bType voxel.BlockTyp
 		vy := float32(2.5) + cos32(float32(i*5))*2.0
 		vz := rz*4.5 + cos32(float32(i*3))*1.5
 
+		txCol, row := voxel.GetBlockTextureAtlasPos(bType, voxel.FaceNorth)
+		pixelSize := float32(16)
+		offsetX := float32(i%4) * 4.0 // 4x4 pixel chunks
+		offsetY := float32((i/4)%4) * 4.0
+		srcRec := rl.NewRectangle(float32(txCol)*pixelSize+offsetX, float32(row)*pixelSize+offsetY, 4, 4)
+
 		p.Particles = append(p.Particles, BlockParticle{
-			Pos:     rl.Vector3{X: pos.X + 0.5 + rx, Y: pos.Y + 0.5 + ry, Z: pos.Z + 0.5 + rz},
-			Vel:     rl.Vector3{X: vx, Y: vy, Z: vz},
-			Color:   col,
-			Life:    0.6,
-			MaxLife: 0.6,
-			Size:    0.08 + float32(i%3)*0.03,
+			Pos:       rl.Vector3{X: pos.X + 0.5 + rx, Y: pos.Y + 0.5 + ry, Z: pos.Z + 0.5 + rz},
+			Vel:       rl.Vector3{X: vx, Y: vy, Z: vz},
+			Color:     rl.White, // Textured particles don't need solid color tinting
+			SourceRec: srcRec,
+			Life:      0.0,
+			MaxLife:   0.6 + rand.Float32()*0.4,
+			Size:      0.15 + rand.Float32()*0.08,
 		})
 	}
 }
@@ -826,11 +831,16 @@ func (p *MCPlayer) updateCamera(dt float32) {
 // Rendering.
 // ---------------------------------------------------------------------------
 
-// RenderParticles renders all active flying block break debris.
-func (p *MCPlayer) RenderParticles() {
+// RenderParticles renders all active flying block break debris and eating particles.
+func (p *MCPlayer) RenderParticles(atlas *voxel.TextureAtlas) {
+	if atlas == nil || atlas.Texture.ID == 0 {
+		return
+	}
+	
 	for i := 0; i < len(p.Particles); i++ {
 		part := &p.Particles[i]
-		rl.DrawCube(part.Pos, part.Size, part.Size, part.Size, part.Color)
+		// Draw 2D textured particle billboard always facing the camera
+		rl.DrawBillboardRec(p.RLCamera, atlas.Texture, part.SourceRec, part.Pos, rl.NewVector2(part.Size, part.Size), part.Color)
 	}
 }
 

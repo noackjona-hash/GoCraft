@@ -29,7 +29,9 @@ type ChunkCoord struct {
 // ChunkData holds the 16x48x16 voxels for an infinite world chunk
 type ChunkData struct {
 	Coord  ChunkCoord
-	Blocks [ChunkSize][WorldHeight][ChunkSize]BlockType
+	Blocks     [ChunkSize][WorldHeight][ChunkSize]BlockType
+	SkyLight   [ChunkSize][WorldHeight][ChunkSize]uint8
+	BlockLight [ChunkSize][WorldHeight][ChunkSize]uint8
 }
 
 // VoxelWorld manages infinite chunk generation and block queries
@@ -393,12 +395,15 @@ func (w *VoxelWorld) SetBlock(x, y, z int, b BlockType) {
 	chunk.Blocks[lx][y][lz] = b
 
 	pos := BlockPos{X: x, Y: y, Z: z}
-	if b == BlockTorch {
-		w.Torches[pos] = 14
-	} else if b == BlockFurnace {
-		w.Torches[pos] = 13
-	} else if oldB == BlockTorch || oldB == BlockFurnace {
-		delete(w.Torches, pos)
+	
+	newDef := BlockRegistry[b]
+	if newDef.IsLightSource {
+		w.Torches[pos] = newDef.LightLevel
+	} else {
+		oldDef := BlockRegistry[oldB]
+		if oldDef.IsLightSource {
+			delete(w.Torches, pos)
+		}
 	}
 }
 
@@ -416,6 +421,73 @@ func (w *VoxelWorld) GetHighestOpaqueBlock(x, z int) int {
 	return 0
 }
 
+// CheckLineOfSight performs a 3D Bresenham line algorithm to check for occlusion.
+// Returns true if there is a clear line of sight (no solid blocks) between start and end.
+func (w *VoxelWorld) CheckLineOfSight(x0, y0, z0, x1, y1, z1 int) bool {
+	dx := math.Abs(float64(x1 - x0))
+	dy := math.Abs(float64(y1 - y0))
+	dz := math.Abs(float64(z1 - z0))
+
+	var sx, sy, sz int
+	if x0 < x1 { sx = 1 } else { sx = -1 }
+	if y0 < y1 { sy = 1 } else { sy = -1 }
+	if z0 < z1 { sz = 1 } else { sz = -1 }
+
+	if dx >= dy && dx >= dz {
+		err1 := 2*dy - dx
+		err2 := 2*dz - dx
+		for i := 0; i < int(dx); i++ {
+			if w.IsSolid(x0, y0, z0) { return false }
+			if err1 > 0 {
+				y0 += sy
+				err1 -= 2 * dx
+			}
+			if err2 > 0 {
+				z0 += sz
+				err2 -= 2 * dx
+			}
+			err1 += 2 * dy
+			err2 += 2 * dz
+			x0 += sx
+		}
+	} else if dy >= dx && dy >= dz {
+		err1 := 2*dx - dy
+		err2 := 2*dz - dy
+		for i := 0; i < int(dy); i++ {
+			if w.IsSolid(x0, y0, z0) { return false }
+			if err1 > 0 {
+				x0 += sx
+				err1 -= 2 * dy
+			}
+			if err2 > 0 {
+				z0 += sz
+				err2 -= 2 * dy
+			}
+			err1 += 2 * dx
+			err2 += 2 * dz
+			y0 += sy
+		}
+	} else {
+		err1 := 2*dy - dz
+		err2 := 2*dx - dz
+		for i := 0; i < int(dz); i++ {
+			if w.IsSolid(x0, y0, z0) { return false }
+			if err1 > 0 {
+				y0 += sy
+				err1 -= 2 * dz
+			}
+			if err2 > 0 {
+				x0 += sx
+				err2 -= 2 * dz
+			}
+			err1 += 2 * dy
+			err2 += 2 * dx
+			z0 += sz
+		}
+	}
+	return !w.IsSolid(x0, y0, z0)
+}
+
 // GetLightLevel returns authentic Minecraft SkyLight (0.0..1.0) and TorchLight (0.0..1.0)
 func (w *VoxelWorld) GetLightLevel(x, y, z int) (float32, float32) {
 	if y >= WorldHeight-1 {
@@ -426,17 +498,10 @@ func (w *VoxelWorld) GetLightLevel(x, y, z int) (float32, float32) {
 	var skyLight float32 = 1.0
 
 	if y < topOpaque {
-		// Inside solid cave or under solid overhang: calculate soft horizontal ambient sky diffusion
-		depth := topOpaque - y
-		if depth <= 4 {
-			skyLight = 0.70 - float32(depth)*0.08
-		} else if depth <= 10 {
-			skyLight = 0.38 - float32(depth-4)*0.04
-		} else {
-			skyLight = 0.12 // Deep cave darkness
-		}
-
-		// Horizontal diffusion from nearby open sky columns within 3 blocks
+		// Inside solid cave or under solid overhang
+		skyLight = 0.12 // Base cave darkness
+		
+		// Look up and diagonally for skylight, but only if we have line of sight!
 		for ox := -2; ox <= 2; ox++ {
 			for oz := -2; oz <= 2; oz++ {
 				if ox == 0 && oz == 0 {
@@ -444,10 +509,15 @@ func (w *VoxelWorld) GetLightLevel(x, y, z int) (float32, float32) {
 				}
 				dist := float32(math.Sqrt(float64(ox*ox + oz*oz)))
 				neighborOpaque := w.GetHighestOpaqueBlock(x+ox, z+oz)
+				
+				// If the neighbor column has open sky, and we can SEE it without blocks in the way
 				if y >= neighborOpaque {
-					diffused := 1.0 - dist*0.14
-					if diffused > skyLight {
-						skyLight = diffused
+					// Add 1 to y to raycast towards the sky hole
+					if w.CheckLineOfSight(x, y, z, x+ox, neighborOpaque, z+oz) {
+						diffused := 1.0 - dist*0.14
+						if diffused > skyLight {
+							skyLight = diffused
+						}
 					}
 				}
 			}
@@ -456,12 +526,11 @@ func (w *VoxelWorld) GetLightLevel(x, y, z int) (float32, float32) {
 		// Above all opaque terrain: check for soft tree leaf shade
 		leafCount := 0
 		for checkY := y + 1; checkY < WorldHeight; checkY++ {
-			if w.GetBlock(x, checkY, z) == BlockOakLeaves {
+			if w.GetBlock(x, checkY, z) == BlockOakLeaves || w.GetBlock(x, checkY, z) == BlockBirchLeaves {
 				leafCount++
 			}
 		}
 		if leafCount > 0 {
-			// Soft gentle tree shade: 0.85 to 0.94 (never black!)
 			skyLight = 1.0 - float32(leafCount)*0.04
 			if skyLight < 0.82 {
 				skyLight = 0.82
@@ -477,9 +546,12 @@ func (w *VoxelWorld) GetLightLevel(x, y, z int) (float32, float32) {
 		dz := math.Abs(float64(z - pos.Z))
 		manhattan := dx + dy + dz
 		if manhattan <= float64(strength) {
-			tLight := float32(float64(strength)-manhattan) / float32(strength)
-			if tLight > maxTorchLight {
-				maxTorchLight = tLight
+			// CRITICAL FIX: Only illuminate if there is a clear line of sight to the torch!
+			if w.CheckLineOfSight(x, y, z, pos.X, pos.Y, pos.Z) {
+				tLight := float32(float64(strength)-manhattan) / 15.0 // Max light level is 15
+				if tLight > maxTorchLight {
+					maxTorchLight = tLight
+				}
 			}
 		}
 	}

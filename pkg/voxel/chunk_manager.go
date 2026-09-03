@@ -154,12 +154,25 @@ vec4 minecraft_mix_light(vec3 lightDir, vec3 normal, vec4 color) {
     return vec4(color.rgb * sunFacet, color.a);
 }
 
+// ACES Filmic Tone Mapping for "Raytracing" aesthetics
+vec3 ACESFilm(vec3 x) {
+    float a = 2.51;
+    float b = 0.03;
+    float c = 2.43;
+    float d = 0.59;
+    float e = 0.14;
+    return clamp((x*(a*x+b))/(x*(c*x+d)+e), 0.0, 1.0);
+}
+
 void main() {
     fragTexCoord = vertexTexCoord;
     vec4 worldPos = matModel * vec4(vertexPosition, 1.0);
     vertexDistance = length(worldPos.xyz - viewPos);
 
-    fragColor = minecraft_mix_light(lightDir0, vertexNormal, vertexColor);
+    vec4 mixedColor = minecraft_mix_light(lightDir0, vertexNormal, vertexColor);
+    mixedColor.rgb = ACESFilm(mixedColor.rgb * 1.2);
+    fragColor = mixedColor;
+    
     gl_Position = mvp * vec4(vertexPosition, 1.0);
 }
 `
@@ -465,6 +478,9 @@ func (cm *ChunkManager) RebuildChunkMeshes(c *Chunk) {
 
 	w := cm.World
 
+	// --- LIGHTING COMPUTATION ---
+	lightMap := CalculateLocalLightMap(w, c.Coord.X, c.Coord.Z)
+
 	for x := startX; x < endX; x++ {
 		for z := startZ; z < endZ; z++ {
 			for y := 0; y < WorldHeight; y++ {
@@ -594,7 +610,7 @@ func (cm *ChunkManager) RebuildChunkMeshes(c *Chunk) {
 				if topAir {
 					uMin, vMin, uMax, vMax := GetBlockTextureUVs(bType, FaceTop)
 					faceMult := FaceLightingMultipliers[FaceTop]
-					skyLight, torchLight := w.GetLightLevel(x, y+1, z)
+					skyLight, torchLight := lightMap.GetLight(x, y+1, z)
 
 					ao0 := CalculateVertexAO(w.IsSolid(x-1, y+1, z), w.IsSolid(x, y+1, z+1), w.IsSolid(x-1, y+1, z+1))
 					ao1 := CalculateVertexAO(w.IsSolid(x+1, y+1, z), w.IsSolid(x, y+1, z+1), w.IsSolid(x+1, y+1, z+1))
@@ -619,7 +635,7 @@ func (cm *ChunkManager) RebuildChunkMeshes(c *Chunk) {
 				if bottomAir {
 					uMin, vMin, uMax, vMax := GetBlockTextureUVs(bType, FaceBottom)
 					faceMult := FaceLightingMultipliers[FaceBottom]
-					skyLight, torchLight := w.GetLightLevel(x, y-1, z)
+					skyLight, torchLight := lightMap.GetLight(x, y-1, z)
 
 					ao0 := CalculateVertexAO(w.IsSolid(x-1, y-1, z), w.IsSolid(x, y-1, z-1), w.IsSolid(x-1, y-1, z-1))
 					ao1 := CalculateVertexAO(w.IsSolid(x+1, y-1, z), w.IsSolid(x, y-1, z-1), w.IsSolid(x+1, y-1, z-1))
@@ -644,7 +660,7 @@ func (cm *ChunkManager) RebuildChunkMeshes(c *Chunk) {
 				if northAir {
 					uMin, vMin, uMax, vMax := GetBlockTextureUVs(bType, FaceNorth)
 					faceMult := FaceLightingMultipliers[FaceNorth]
-					skyLight, torchLight := w.GetLightLevel(x, y, z-1)
+					skyLight, torchLight := lightMap.GetLight(x, y, z-1)
 
 					ao0 := CalculateVertexAO(w.IsSolid(x+1, y, z-1), w.IsSolid(x, y-1, z-1), w.IsSolid(x+1, y-1, z-1))
 					ao1 := CalculateVertexAO(w.IsSolid(x-1, y, z-1), w.IsSolid(x, y-1, z-1), w.IsSolid(x-1, y-1, z-1))
@@ -669,7 +685,7 @@ func (cm *ChunkManager) RebuildChunkMeshes(c *Chunk) {
 				if southAir {
 					uMin, vMin, uMax, vMax := GetBlockTextureUVs(bType, FaceSouth)
 					faceMult := FaceLightingMultipliers[FaceSouth]
-					skyLight, torchLight := w.GetLightLevel(x, y, z+1)
+					skyLight, torchLight := lightMap.GetLight(x, y, z+1)
 
 					ao0 := CalculateVertexAO(w.IsSolid(x-1, y, z+1), w.IsSolid(x, y-1, z+1), w.IsSolid(x-1, y-1, z+1))
 					ao1 := CalculateVertexAO(w.IsSolid(x+1, y, z+1), w.IsSolid(x, y-1, z+1), w.IsSolid(x+1, y-1, z+1))
@@ -694,7 +710,7 @@ func (cm *ChunkManager) RebuildChunkMeshes(c *Chunk) {
 				if westAir {
 					uMin, vMin, uMax, vMax := GetBlockTextureUVs(bType, FaceWest)
 					faceMult := FaceLightingMultipliers[FaceWest]
-					skyLight, torchLight := w.GetLightLevel(x-1, y, z)
+					skyLight, torchLight := lightMap.GetLight(x-1, y, z)
 
 					ao0 := CalculateVertexAO(w.IsSolid(x-1, y, z-1), w.IsSolid(x-1, y-1, z), w.IsSolid(x-1, y-1, z-1))
 					ao1 := CalculateVertexAO(w.IsSolid(x-1, y, z+1), w.IsSolid(x-1, y-1, z), w.IsSolid(x-1, y-1, z+1))
@@ -719,7 +735,7 @@ func (cm *ChunkManager) RebuildChunkMeshes(c *Chunk) {
 				if eastAir {
 					uMin, vMin, uMax, vMax := GetBlockTextureUVs(bType, FaceEast)
 					faceMult := FaceLightingMultipliers[FaceEast]
-					skyLight, torchLight := w.GetLightLevel(x+1, y, z)
+					skyLight, torchLight := lightMap.GetLight(x+1, y, z)
 
 					ao0 := CalculateVertexAO(w.IsSolid(x+1, y, z+1), w.IsSolid(x+1, y-1, z), w.IsSolid(x+1, y-1, z+1))
 					ao1 := CalculateVertexAO(w.IsSolid(x+1, y, z-1), w.IsSolid(x+1, y-1, z), w.IsSolid(x+1, y-1, z-1))

@@ -94,6 +94,7 @@ type BlockDef struct {
 	IsSolid          bool
 	IsTransparent    bool
 	IsLightSource    bool
+	LightLevel       uint8   // Emitted light level (0 to 15)
 	Hardness         float32 // Mining time
 	DropItem         BlockType
 	IsTool           bool
@@ -113,7 +114,26 @@ func GetBlockDrop(b BlockType) BlockType {
 	if b == BlockOakLeaves || b == BlockBirchLeaves || b == BlockGlass || b == BlockWater || b == BlockBedrock {
 		return BlockAir
 	}
-	return b
+	return b // Default: drops itself
+}
+
+// GetLightOpacity returns how much light is subtracted when passing through the block.
+func GetLightOpacity(b BlockType) uint8 {
+	if b == BlockAir {
+		return 1
+	}
+	def, exists := BlockRegistry[b]
+	if !exists || (def.IsSolid && !def.IsTransparent) {
+		return 15 // Completely opaque
+	}
+	if b == BlockWater {
+		return 3 // Water absorbs 3 light levels per block
+	}
+	if b == BlockOakLeaves || b == BlockBirchLeaves {
+		return 2 // Leaves absorb 2 light levels per block
+	}
+	// Glass, Torches, etc.
+	return 1
 }
 
 // BlockRegistry holds all registered block & item definitions
@@ -315,6 +335,8 @@ var BlockRegistry = map[BlockType]BlockDef{
 		SideColor:   rl.NewColor(120, 110, 110, 255),
 		BottomColor: rl.NewColor(115, 105, 105, 255),
 		IsSolid:     true,
+		IsLightSource: true,
+		LightLevel:  9,
 		Hardness:    3.0,
 	},
 	BlockEmeraldOre: {
@@ -371,6 +393,7 @@ var BlockRegistry = map[BlockType]BlockDef{
 		IsSolid:       false,
 		IsTransparent: true,
 		IsLightSource: true,
+		LightLevel:    14,
 		Hardness:      0.05,
 	},
 	BlockFurnace: {
@@ -380,6 +403,8 @@ var BlockRegistry = map[BlockType]BlockDef{
 		SideColor:   rl.NewColor(105, 105, 105, 255),
 		BottomColor: rl.NewColor(100, 100, 100, 255),
 		IsSolid:     true,
+		IsLightSource: true,
+		LightLevel:  13,
 		Hardness:    2.5,
 	},
 	BlockBookshelf: {
