@@ -1,8 +1,10 @@
 package voxel
 
 import (
+	"fmt"
 	"math"
 	"math/rand"
+	"path/filepath"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
@@ -28,17 +30,19 @@ type ChunkCoord struct {
 
 // ChunkData holds the 16x48x16 voxels for an infinite world chunk
 type ChunkData struct {
-	Coord  ChunkCoord
+	Coord      ChunkCoord
 	Blocks     [ChunkSize][WorldHeight][ChunkSize]BlockType
 	SkyLight   [ChunkSize][WorldHeight][ChunkSize]uint8
 	BlockLight [ChunkSize][WorldHeight][ChunkSize]uint8
+	Modified   bool
 }
 
-// VoxelWorld manages infinite chunk generation and block queries
+// VoxelWorld manages infinite chunk generation, block queries, and chunk persistence
 type VoxelWorld struct {
 	Chunks           map[ChunkCoord]*ChunkData
 	ScheduledUpdates []ScheduledUpdate
 	Torches          map[BlockPos]uint8
+	SaveDir          string
 }
 
 // NewVoxelWorld initializes the infinite procedural voxel world
@@ -50,15 +54,41 @@ func NewVoxelWorld() *VoxelWorld {
 	}
 }
 
-// GetChunk returns chunk at (cx, cz), generating it if not already created
+// GetChunk returns chunk at (cx, cz), loading it from disk or generating it if needed
 func (w *VoxelWorld) GetChunk(cx, cz int) *ChunkData {
 	coord := ChunkCoord{X: cx, Z: cz}
 	chunk, exists := w.Chunks[coord]
 	if !exists {
-		chunk = w.generateChunk(cx, cz)
+		if w.SaveDir != "" {
+			chunkPath := filepath.Join(w.SaveDir, "chunks", fmt.Sprintf("c.%d.%d.bin", cx, cz))
+			if loaded, err := LoadChunkGzip(chunkPath, cx, cz); err == nil && loaded != nil {
+				chunk = loaded
+			}
+		}
+		if chunk == nil {
+			chunk = w.generateChunk(cx, cz)
+		}
 		w.Chunks[coord] = chunk
 	}
 	return chunk
+}
+
+// SaveAllModifiedChunks writes all dirty chunks to saves/<world>/chunks/
+func (w *VoxelWorld) SaveAllModifiedChunks() int {
+	if w.SaveDir == "" {
+		return 0
+	}
+	count := 0
+	for coord, chunk := range w.Chunks {
+		if chunk.Modified {
+			filePath := filepath.Join(w.SaveDir, "chunks", fmt.Sprintf("c.%d.%d.bin", coord.X, coord.Z))
+			if err := SaveChunkGzip(filePath, chunk); err == nil {
+				chunk.Modified = false
+				count++
+			}
+		}
+	}
+	return count
 }
 
 type BiomeType int
@@ -692,7 +722,11 @@ func (w *VoxelWorld) SetBlock(x, y, z int, b BlockType) {
 
 	chunk := w.GetChunk(cx, cz)
 	oldB := chunk.Blocks[lx][y][lz]
+	if oldB == b {
+		return
+	}
 	chunk.Blocks[lx][y][lz] = b
+	chunk.Modified = true
 
 	pos := BlockPos{X: x, Y: y, Z: z}
 	

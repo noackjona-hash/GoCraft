@@ -57,7 +57,10 @@ func main() {
 	atlas := voxel.GenerateTextureAtlas()
 	defer atlas.Unload()
 
+	saveDir := "saves/world"
 	world := voxel.NewVoxelWorld()
+	world.SaveDir = saveDir
+
 	chunkManager := voxel.NewChunkManager(world, atlas)
 
 	// Environment Textures (Sun, Moon Phases) with Transparent Backgrounds
@@ -70,18 +73,60 @@ func main() {
 		defer rl.UnloadTexture(moonTex)
 	}
 
-	// Spawn Player on top of highest terrain block
-	spawnY := float32(world.GetHighestBlock(0, 0) + 2)
-	if spawnY < float32(voxel.WaterLevel+2) {
-		spawnY = float32(voxel.WaterLevel + 2)
+	// Attempt to load existing saved game state
+	levelData, loadErr := voxel.LoadLevelData(saveDir)
+	hasSave := (loadErr == nil && levelData != nil)
+
+	var player *mcplayer.MCPlayer
+	if hasSave {
+		player = mcplayer.NewMCPlayer(rl.Vector3{X: levelData.Player.X, Y: levelData.Player.Y, Z: levelData.Player.Z})
+		player.Yaw = levelData.Player.Yaw
+		player.Pitch = levelData.Player.Pitch
+		player.Health = levelData.Player.Health
+		player.Hunger = levelData.Player.Hunger
+		player.Oxygen = levelData.Player.Oxygen
+		player.Level = levelData.Player.Level
+		player.ExpProgress = levelData.Player.ExpProgress
+		if levelData.Player.Mode == 1 {
+			player.Mode = mcplayer.GameModeCreative
+		} else {
+			player.Mode = mcplayer.GameModeSurvival
+		}
+		// Restore torches
+		for _, t := range levelData.Torches {
+			world.Torches[voxel.BlockPos{X: t.X, Y: t.Y, Z: t.Z}] = t.LightLevel
+		}
+		fmt.Printf("Loaded saved world! Player at (%.1f, %.1f, %.1f)\n", player.Pos.X, player.Pos.Y, player.Pos.Z)
+	} else {
+		// Spawn Player on top of highest terrain block
+		spawnY := float32(world.GetHighestBlock(0, 0) + 2)
+		if spawnY < float32(voxel.WaterLevel+2) {
+			spawnY = float32(voxel.WaterLevel + 2)
+		}
+		player = mcplayer.NewMCPlayer(rl.Vector3{X: 0.5, Y: spawnY, Z: 0.5})
 	}
-	player := mcplayer.NewMCPlayer(rl.Vector3{X: 0.5, Y: spawnY, Z: 0.5})
 
 	// Pre-load initial chunks around spawn
 	chunkManager.UpdatePlayerPos(player.Pos)
 
 	gui := mcui.NewInventoryGUI(screenWidth, screenHeight)
 	defer gui.Unload()
+
+	// Restore Inventory if save existed
+	if hasSave {
+		gui.SelectedSlot = levelData.Inventory.SelectedSlot
+		for idx, s := range levelData.Inventory.Hotbar {
+			if idx < len(gui.HotbarSlots) {
+				gui.HotbarSlots[idx] = mcui.ItemStack{Type: s.Type, Count: s.Count}
+			}
+		}
+		for idx, s := range levelData.Inventory.Main {
+			if idx < len(gui.MainInventory) {
+				gui.MainInventory[idx] = mcui.ItemStack{Type: s.Type, Count: s.Count}
+			}
+		}
+		gui.UpdateCrafting()
+	}
 
 	audioEngine := mcaudio.NewMCAudioEngine()
 	defer audioEngine.Close()
@@ -108,6 +153,10 @@ func main() {
 	// Day/Night Cycle
 	timeOfDay := float32(0.2) // 0.0 to 1.0 (0.2 = Morning, 0.5 = Noon, 0.8 = Sunset, 1.0 = Midnight)
 	dayCount := 0
+	if hasSave {
+		timeOfDay = levelData.TimeOfDay
+		dayCount = levelData.DayCount
+	}
 	dayLengthSec := float32(300.0)
 	cloudOffset := float32(0.0)
 
@@ -115,6 +164,66 @@ func main() {
 	var currentMiningPos rl.Vector3
 	var miningProgress float32
 	var miningCrunchTimer float32
+
+	// Save notification and timer
+	var savedBannerTimer float32
+	var autosaveTimer float32
+
+	saveWorldState := func() {
+		chunksSaved := world.SaveAllModifiedChunks()
+
+		var hotbarSave []voxel.SlotSave
+		for _, slot := range gui.HotbarSlots {
+			hotbarSave = append(hotbarSave, voxel.SlotSave{Type: slot.Type, Count: slot.Count})
+		}
+		var mainSave []voxel.SlotSave
+		for _, slot := range gui.MainInventory {
+			mainSave = append(mainSave, voxel.SlotSave{Type: slot.Type, Count: slot.Count})
+		}
+
+		var torchSaves []voxel.TorchSave
+		for pos, light := range world.Torches {
+			torchSaves = append(torchSaves, voxel.TorchSave{X: pos.X, Y: pos.Y, Z: pos.Z, LightLevel: light})
+		}
+
+		modeVal := 0
+		if player.Mode == mcplayer.GameModeCreative {
+			modeVal = 1
+		}
+
+		data := &voxel.LevelData{
+			Version: 1,
+			Player: voxel.PlayerSave{
+				X:           player.Pos.X,
+				Y:           player.Pos.Y,
+				Z:           player.Pos.Z,
+				Yaw:         player.Yaw,
+				Pitch:       player.Pitch,
+				Health:      player.Health,
+				Hunger:      player.Hunger,
+				Oxygen:      player.Oxygen,
+				Level:       player.Level,
+				ExpProgress: player.ExpProgress,
+				Mode:        modeVal,
+			},
+			Inventory: voxel.InventorySave{
+				SelectedSlot: gui.SelectedSlot,
+				Hotbar:       hotbarSave,
+				Main:         mainSave,
+			},
+			TimeOfDay: timeOfDay,
+			DayCount:  dayCount,
+			Torches:   torchSaves,
+		}
+
+		if err := voxel.SaveLevelData(saveDir, data); err == nil {
+			savedBannerTimer = 2.2
+			if chunksSaved > 0 {
+				fmt.Printf("World saved: %d chunks written to disk.\n", chunksSaved)
+			}
+		}
+	}
+	defer saveWorldState()
 
 	// Main Game Loop
 	for !rl.WindowShouldClose() {
@@ -175,6 +284,20 @@ func main() {
 
 		// Tick Furnace smelting and burning physics
 		gui.UpdateFurnace(dt)
+
+		// Autosave every 60 seconds
+		autosaveTimer += dt
+		if autosaveTimer >= 60.0 && !player.IsDead {
+			saveWorldState()
+			autosaveTimer = 0
+		}
+
+		// Manual Save (F5)
+		if rl.IsKeyPressed(rl.KeyF5) && !player.IsDead {
+			saveWorldState()
+			autosaveTimer = 0
+			audioEngine.TriggerBlockPlace()
+		}
 
 		// 'G' Key: Toggle GameMode (Survival <-> Creative)
 		if rl.IsKeyPressed(rl.KeyG) && !player.IsDead {
@@ -693,10 +816,25 @@ func main() {
 		if player.Mode == mcplayer.GameModeCreative {
 			modeTag = "[CREATIVE]"
 		}
-		controlsText := fmt.Sprintf("%s  |  WASD: Move  |  SPACE: Jump/Swim Up  |  SHIFT/C: Dive  |  LEFT CLICK: Mine  |  RIGHT CLICK: Place/Workbench  |  E: Crafting  |  G: Mode", modeTag)
+		controlsText := fmt.Sprintf("%s  |  WASD: Move  |  SPACE: Jump  |  SHIFT/C: Dive  |  L-CLICK: Mine  |  R-CLICK: Place  |  E: Crafting  |  G: Mode  |  F5: Save", modeTag)
 		cLen := rl.MeasureText(controlsText, 12)
 		rl.DrawRectangleRounded(rl.NewRectangle(float32(screenWidth)*0.5-float32(cLen)*0.5-12, 10, float32(cLen)+24, 26), 0.3, 4, rl.NewColor(15, 20, 30, 210))
 		rl.DrawText(controlsText, int32(screenWidth)/2-cLen/2, 16, 12, rl.NewColor(240, 245, 255, 255))
+
+		// Save Notification Toast
+		if savedBannerTimer > 0 {
+			savedBannerTimer -= dt
+			alpha := float32(1.0)
+			if savedBannerTimer < 0.5 {
+				alpha = savedBannerTimer / 0.5
+			}
+			msg := "✓ Game Saved"
+			mLen := rl.MeasureText(msg, 14)
+			boxW := float32(mLen + 28)
+			boxX := float32(screenWidth)*0.5 - boxW*0.5
+			rl.DrawRectangleRounded(rl.NewRectangle(boxX, 42, boxW, 28), 0.3, 4, rl.NewColor(15, 25, 35, uint8(alpha*220)))
+			rl.DrawText(msg, int32(boxX)+14, 48, 14, rl.NewColor(255, 215, 60, uint8(alpha*255)))
+		}
 
 		// Coordinates & Chunk Info (Top Left)
 		coordStr := fmt.Sprintf("XYZ: %.1f / %.1f / %.1f  |  Chunk: %d, %d", player.Pos.X, player.Pos.Y, player.Pos.Z, int(player.Pos.X)>>4, int(player.Pos.Z)>>4)

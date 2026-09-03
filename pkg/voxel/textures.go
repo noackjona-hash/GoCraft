@@ -407,6 +407,41 @@ func stitchResourcePack(img *rl.Image, blockDir, itemDir string, tileSize int32)
 		}
 	}
 
+	// 3. Stitch authentic Steve player skin arm & sleeve into Row 15 if available
+	steveCandidatePaths := []string{
+		"assets/textures/entity/player/wide/steve.png",
+		"assets/textures/entity/player/steve.png",
+	}
+	for _, sPath := range steveCandidatePaths {
+		if _, err := os.Stat(sPath); err == nil {
+			steveImg := rl.LoadImage(sPath)
+			if steveImg.Width >= 64 && steveImg.Height >= 32 {
+				// Steve right arm front: x: 44, y: 20, w: 4, h: 12
+				// Sleeve: top 4x4 of right arm front (x: 44, y: 20, w: 4, h: 4)
+				sleeveCrop := rl.ImageFromImage(steveImg, rl.NewRectangle(44, 20, 4, 4))
+				rl.ImageResizeNN(sleeveCrop, tileSize, tileSize)
+				dstX0 := int32(0 * int(tileSize))
+				dstY15 := int32(15 * int(tileSize))
+				rl.ImageDrawRectangle(img, dstX0, dstY15, tileSize, tileSize, rl.Blank)
+				rl.ImageDraw(img, sleeveCrop, rl.NewRectangle(0, 0, float32(tileSize), float32(tileSize)),
+					rl.NewRectangle(float32(dstX0), float32(dstY15), float32(tileSize), float32(tileSize)), rl.White)
+				rl.UnloadImage(sleeveCrop)
+
+				// Skin/Hand: bottom 4x8 of right arm front (x: 44, y: 24, w: 4, h: 8)
+				skinCrop := rl.ImageFromImage(steveImg, rl.NewRectangle(44, 24, 4, 8))
+				rl.ImageResizeNN(skinCrop, tileSize, tileSize)
+				dstX1 := int32(1 * int(tileSize))
+				rl.ImageDrawRectangle(img, dstX1, dstY15, tileSize, tileSize, rl.Blank)
+				rl.ImageDraw(img, skinCrop, rl.NewRectangle(0, 0, float32(tileSize), float32(tileSize)),
+					rl.NewRectangle(float32(dstX1), float32(dstY15), float32(tileSize), float32(tileSize)), rl.White)
+				rl.UnloadImage(skinCrop)
+				count += 2
+			}
+			rl.UnloadImage(steveImg)
+			break
+		}
+	}
+
 	return count
 }
 
@@ -447,16 +482,10 @@ func generateProceduralBase(img *rl.Image) {
 	drawFurnaceSide(img, 14, 1)
 	drawBookshelf(img, 15, 1)
 
-	// Row 2: Lighting, Water & Steve Model
+	// Row 2: Lighting, Water & Nature
 	drawTorch(img, 0, 2)
 	drawWater(img, 1, 2)
 	drawWater(img, 2, 2)
-	drawSteveHeadFront(img, 3, 2)
-	drawSteveHeadSide(img, 4, 2)
-	drawSteveHeadTop(img, 5, 2)
-	drawSteveShirt(img, 6, 2)
-	drawSteveSkin(img, 7, 2)
-	drawStevePants(img, 8, 2)
 	drawBirchLogSide(img, 9, 2)
 	drawBirchLogTop(img, 10, 2)
 	drawBirchLeaves(img, 11, 2)
@@ -478,6 +507,14 @@ func generateProceduralBase(img *rl.Image) {
 	drawTool(img, 13, 3, rl.NewColor(230, 230, 230, 255), "pickaxe")
 	drawTool(img, 14, 3, rl.NewColor(230, 230, 230, 255), "axe")
 	drawTool(img, 15, 3, rl.NewColor(95, 240, 250, 255), "pickaxe")
+
+	// Row 15: Authentic Steve Character Model & First-Person Arm
+	drawSteveShirt(img, 0, 15)
+	drawSteveSkin(img, 1, 15)
+	drawStevePants(img, 2, 15)
+	drawSteveHeadFront(img, 3, 15)
+	drawSteveHeadSide(img, 4, 15)
+	drawSteveHeadTop(img, 5, 15)
 }
 
 // Unload frees atlas resources
@@ -976,17 +1013,39 @@ func drawSteveHeadTop(img *rl.Image, col, row int) {
 }
 
 func drawSteveShirt(img *rl.Image, col, row int) {
+	cyanBase := rl.NewColor(0, 168, 178, 255)
+	cyanDark := rl.NewColor(0, 142, 152, 255)
+	cyanLight := rl.NewColor(20, 185, 195, 255)
 	for y := 0; y < 16; y++ {
 		for x := 0; x < 16; x++ {
-			setPixel(img, col, row, x, y, rl.NewColor(0, 168, 178, 255))
+			c := cyanBase
+			if x == 0 || y == 0 || x == 15 || y == 15 {
+				c = cyanDark
+			} else if (x+y)%4 == 0 {
+				c = cyanLight
+			} else if (x*3+y*7)%5 == 0 {
+				c = cyanDark
+			}
+			setPixel(img, col, row, x, y, c)
 		}
 	}
 }
 
 func drawSteveSkin(img *rl.Image, col, row int) {
+	skinBase := rl.NewColor(215, 160, 120, 255)
+	skinDark := rl.NewColor(195, 140, 102, 255)
+	skinCrease := rl.NewColor(178, 124, 88, 255)
 	for y := 0; y < 16; y++ {
 		for x := 0; x < 16; x++ {
-			setPixel(img, col, row, x, y, rl.NewColor(215, 160, 120, 255))
+			c := skinBase
+			if x == 0 || x == 15 {
+				c = skinDark
+			} else if y == 8 || y == 9 {
+				c = skinCrease
+			} else if (x*5+y*3)%7 == 0 {
+				c = skinDark
+			}
+			setPixel(img, col, row, x, y, c)
 		}
 	}
 }

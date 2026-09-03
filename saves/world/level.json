@@ -1,0 +1,170 @@
+{
+  "version": 1,
+  "player": {
+    "x": -45.283657,
+    "y": 17,
+    "z": -15.681171,
+    "yaw": -1.2823952,
+    "pitch": -0.25386828,
+    "health": 20,
+    "hunger": 16.223024,
+    "oxygen": 10,
+    "level": 30,
+    "exp_progress": 0.65,
+    "mode": 0
+  },
+  "inventory": {
+    "selected_slot": 1,
+    "hotbar": [
+      {
+        "type": 63,
+        "count": 1
+      },
+      {
+        "type": 7,
+        "count": 15
+      },
+      {
+        "type": 22,
+        "count": 12
+      },
+      {
+        "type": 6,
+        "count": 8
+      },
+      {
+        "type": 48,
+        "count": 8
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      }
+    ],
+    "main": [
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      }
+    ]
+  },
+  "time_of_day": 0.4855913,
+  "day_count": 0,
+  "torches": null
+}
