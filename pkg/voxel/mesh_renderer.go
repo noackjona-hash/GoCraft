@@ -197,9 +197,9 @@ func GetBlockTextureAtlasPos(b BlockType, face FaceType) (int, int) {
 	case BlockWaterFlowing:
 		return 0, 14
 	case ItemWaterBucket:
-		return 11, 5
+		return 12, 8
 	case ItemBucket:
-		return 12, 5
+		return 13, 8
 	case ItemStick:
 		return 0, 3
 	case ItemDiamond:
@@ -266,6 +266,110 @@ func GetBlockTextureAtlasPos(b BlockType, face FaceType) (int, int) {
 		return 15, 4
 	case ItemArrow:
 		return 10, 5
+
+	// Row 5: Weapons & Tools
+	case ItemBow:
+		return 0, 5
+	case ItemShield:
+		return 1, 5
+	case ItemFlintAndSteel:
+		return 2, 5
+	case ItemShears:
+		return 3, 5
+	case ItemFishingRod:
+		return 4, 5
+	case ItemCompass:
+		return 5, 5
+	case ItemClock:
+		return 6, 5
+	case ItemFlint:
+		return 7, 5
+	case ItemString:
+		return 8, 5
+	case ItemFeather:
+		return 9, 5
+
+	// Row 6: Materials & Drops
+	case ItemGoldNugget:
+		return 5, 6
+	case ItemIronNugget:
+		return 6, 6
+	case ItemRedstone:
+		return 7, 6
+	case ItemLapisLazuli:
+		return 8, 6
+	case ItemEmerald:
+		return 9, 6
+	case ItemLeather:
+		return 10, 6
+	case ItemSpiderEye:
+		return 11, 6
+	case ItemEnderPearl:
+		return 12, 6
+	case ItemSlimeball:
+		return 13, 6
+	case ItemBlazeRod:
+		return 14, 6
+	case ItemBook:
+		return 15, 6
+
+	// Row 7: Food & Crops
+	case ItemGoldenApple:
+		return 0, 7
+	case ItemCarrot:
+		return 1, 7
+	case ItemGoldenCarrot:
+		return 2, 7
+	case ItemPotato:
+		return 3, 7
+	case ItemBakedPotato:
+		return 4, 7
+	case ItemMushroomStew:
+		return 5, 7
+	case ItemCookie:
+		return 6, 7
+	case ItemRawChicken:
+		return 7, 7
+	case ItemCookedChicken:
+		return 8, 7
+	case ItemRawMutton:
+		return 9, 7
+	case ItemCookedMutton:
+		return 10, 7
+	case ItemWheat:
+		return 11, 7
+	case ItemWheatSeeds:
+		return 12, 7
+	case ItemMelonSlice:
+		return 13, 7
+	case ItemSweetBerries:
+		return 14, 7
+
+	// Row 8: Gold Tools & Armor
+	case ItemGoldenPickaxe:
+		return 0, 8
+	case ItemGoldenAxe:
+		return 1, 8
+	case ItemGoldenShovel:
+		return 2, 8
+	case ItemGoldenSword:
+		return 3, 8
+	case ItemIronHelmet:
+		return 4, 8
+	case ItemIronChestplate:
+		return 5, 8
+	case ItemIronLeggings:
+		return 6, 8
+	case ItemIronBoots:
+		return 7, 8
+	case ItemDiamondHelmet:
+		return 8, 8
+	case ItemDiamondChestplate:
+		return 9, 8
+	case ItemDiamondLeggings:
+		return 10, 8
+	case ItemDiamondBoots:
+		return 11, 8
 	default:
 		return 0, 0
 	}

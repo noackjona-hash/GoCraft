@@ -43,10 +43,26 @@ func (item *ItemEntity) Update(dt float32, world *voxel.VoxelWorld) {
 	item.RotationY += dt * 2.0 // rotate 2 radians per second (about 1 revolution per 3 seconds)
 	item.HoverOffset += dt * 3.0
 
-	// Gravity
-	item.Vel.Y -= 15.0 * dt
-	if item.Vel.Y < -20.0 {
-		item.Vel.Y = -20.0
+	// Gravity & Water Buoyancy
+	ix := int(math.Floor(float64(item.Pos.X)))
+	iy := int(math.Floor(float64(item.Pos.Y)))
+	iz := int(math.Floor(float64(item.Pos.Z)))
+	inWater := voxel.IsWater(world.GetBlock(ix, iy, iz))
+
+	if inWater {
+		// Floating buoyancy: items float to the surface
+		item.Vel.Y += 12.0 * dt
+		if item.Vel.Y > 2.2 {
+			item.Vel.Y = 2.2
+		}
+		item.Vel.X *= 0.85
+		item.Vel.Z *= 0.85
+	} else {
+		// Gravity in air
+		item.Vel.Y -= 15.0 * dt
+		if item.Vel.Y < -20.0 {
+			item.Vel.Y = -20.0
+		}
 	}
 	
 	item.moveWithCollision(item.Vel.X*dt, item.Vel.Y*dt, item.Vel.Z*dt, world)
@@ -55,7 +71,7 @@ func (item *ItemEntity) Update(dt float32, world *voxel.VoxelWorld) {
 	if item.IsGrounded {
 		item.Vel.X *= 0.8
 		item.Vel.Z *= 0.8
-	} else {
+	} else if !inWater {
 		item.Vel.X *= 0.98
 		item.Vel.Z *= 0.98
 	}

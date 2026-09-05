@@ -46,6 +46,7 @@ type Mob struct {
 	HurtTimer   float32
 	AttackTimer float32
 	FuseTimer   float32 // Creeper countdown (1.5s)
+	ShootTimer  float32 // Skeleton arrow firing interval (2.0s)
 	State       MobState
 	StateTimer  float32
 	TargetDir   rl.Vector3
@@ -99,10 +100,10 @@ func (m *Mob) IsHostile() bool {
 	return m.Type == MobZombie || m.Type == MobSkeleton || m.Type == MobCreeper
 }
 
-// Update ticks AI, movement physics, sunlight burning, and combat timers
-func (m *Mob) Update(dt float32, playerPos rl.Vector3, playerHealth *float32, world *voxel.VoxelWorld, sunHeight float32) (exploded bool) {
+// Update ticks AI, movement physics, sunlight burning, combat timers, and projectile attacks
+func (m *Mob) Update(dt float32, playerPos rl.Vector3, playerHealth *float32, world *voxel.VoxelWorld, sunHeight float32) (exploded bool, arrow *Arrow) {
 	if m.IsDead {
-		return false
+		return false, nil
 	}
 
 	// 1. Hurt & Fire Timers
@@ -124,7 +125,7 @@ func (m *Mob) Update(dt float32, playerPos rl.Vector3, playerHealth *float32, wo
 			m.Health -= dt * 2.0
 			if m.Health <= 0 {
 				m.IsDead = true
-				return false
+				return false, nil
 			}
 		}
 	}
@@ -153,25 +154,55 @@ func (m *Mob) Update(dt float32, playerPos rl.Vector3, playerHealth *float32, wo
 					m.FuseTimer += dt
 					if m.FuseTimer >= 1.4 {
 						m.IsDead = true
-						return true // Trigger explosion!
+						return true, nil // Trigger explosion!
 					}
 				} else {
 					if m.FuseTimer > 0 {
 						m.FuseTimer -= dt * 0.8
 					}
 				}
-			}
+				m.Vel.X = dirX * moveSpeed
+				m.Vel.Z = dirZ * moveSpeed
+			} else if m.Type == MobSkeleton {
+				// Skeleton Ranged Archer AI: strafe & shoot arrows
+				m.ShootTimer += dt
 
-			// Chase movement
-			m.Vel.X = dirX * moveSpeed
-			m.Vel.Z = dirZ * moveSpeed
-
-			// Melee attack player
-			if dist < 1.3 && m.AttackTimer <= 0 && m.Type != MobCreeper {
-				if playerHealth != nil {
-					*playerHealth -= 3.0
+				approach := float32(0.0)
+				if dist < 8.0 {
+					approach = -1.0 // Back away if too close
+				} else if dist > 12.5 {
+					approach = 1.0 // Advance if too far
 				}
-				m.AttackTimer = 1.0
+
+				// Lateral strafe movement around the player
+				strafeX := -dirZ
+				strafeZ := dirX
+				m.Vel.X = dirX*approach*1.2 + strafeX*1.3
+				m.Vel.Z = dirZ*approach*1.2 + strafeZ*1.3
+
+				// Fire arrow every 2.0s
+				if m.ShootTimer >= 2.0 && dist < 16.0 {
+					m.ShootTimer = 0.0
+					arrowOrigin := m.Pos
+					arrowOrigin.Y += 1.4
+					targetPos := playerPos
+					targetPos.Y += 0.9
+					aimDir := rl.Vector3Normalize(rl.Vector3Subtract(targetPos, arrowOrigin))
+					aimDir.Y += 0.06 // Slight arch for ballistic drop
+					arrowVel := rl.Vector3Scale(aimDir, 18.0)
+					arrow = NewArrow(arrowOrigin, arrowVel, 3.0, true)
+				}
+			} else {
+				// Zombie chase movement & melee attack
+				m.Vel.X = dirX * moveSpeed
+				m.Vel.Z = dirZ * moveSpeed
+
+				if dist < 1.3 && m.AttackTimer <= 0 {
+					if playerHealth != nil {
+						*playerHealth -= 3.0
+					}
+					m.AttackTimer = 1.0
+				}
 			}
 		} else {
 			m.State = StateIdle
@@ -239,7 +270,7 @@ func (m *Mob) Update(dt float32, playerPos rl.Vector3, playerHealth *float32, wo
 		bx := int(math.Floor(float64(newX)))
 		by := int(math.Floor(float64(m.Pos.Y)))
 		bz := int(math.Floor(float64(newZ)))
-		if world.IsSolid(bx, by, bz) && !world.IsSolid(bx, by+1, bz) {
+		if world != nil && world.IsSolid(bx, by, bz) && !world.IsSolid(bx, by+1, bz) {
 			m.Vel.Y = 6.8 // Jump over 1-block step!
 		}
 	}
@@ -255,7 +286,7 @@ func (m *Mob) Update(dt float32, playerPos rl.Vector3, playerHealth *float32, wo
 		m.WalkBobbing *= 0.9
 	}
 
-	return false
+	return false, arrow
 }
 
 // moveWithCollision moves mob with AABB voxel collisions
@@ -291,6 +322,9 @@ func (m *Mob) moveWithCollision(dx, dy, dz float32, world *voxel.VoxelWorld) {
 }
 
 func (m *Mob) checkCollision(px, py, pz, halfW, height float32, world *voxel.VoxelWorld) bool {
+	if world == nil {
+		return false
+	}
 	minX := int(math.Floor(float64(px - halfW)))
 	maxX := int(math.Floor(float64(px + halfW)))
 	minY := int(math.Floor(float64(py)))
@@ -500,10 +534,23 @@ func (m *Mob) renderSkeleton(tint rl.Color, tex rl.Texture2D) {
 		drawPivotedBoxUV(-0.12, 0.38, 0.0, 0.14, 0.72, 0.14, 0, 16, 2, 12, 2, 64, 32, tint, 0.74, legSwing)
 		drawPivotedBoxUV(0.12, 0.38, 0.0, 0.14, 0.72, 0.14, 0, 16, 2, 12, 2, 64, 32, tint, 0.74, -legSwing)
 
-		drawPivotedBoxUV(-0.28, 1.22, 0.0, 0.12, 0.72, 0.12, 40, 16, 2, 12, 2, 64, 32, tint, 1.58, -legSwing)
-		drawPivotedBoxUV(0.28, 1.22, 0.0, 0.12, 0.72, 0.12, 40, 16, 2, 12, 2, 64, 32, tint, 1.58, legSwing)
+		// Arms: when aiming bow, point forward in archer pose!
+		armRotX := -legSwing
+		if m.State == StateChase {
+			armRotX = -1.35
+		}
+		drawPivotedBoxUV(-0.28, 1.22, 0.0, 0.12, 0.72, 0.12, 40, 16, 2, 12, 2, 64, 32, tint, 1.58, armRotX)
+		drawPivotedBoxUV(0.28, 1.22, 0.0, 0.12, 0.72, 0.12, 40, 16, 2, 12, 2, 64, 32, tint, 1.58, armRotX)
 		
 		rl.SetTexture(0)
+
+		// Render Bow in Skeleton hands when aiming
+		if m.State == StateChase {
+			woodCol := rl.NewColor(135, 95, 50, 255)
+			stringCol := rl.NewColor(220, 220, 220, 255)
+			rl.DrawCube(rl.Vector3{X: 0, Y: 1.25, Z: 0.38}, 0.04, 0.46, 0.04, woodCol)
+			rl.DrawCube(rl.Vector3{X: 0, Y: 1.25, Z: 0.34}, 0.02, 0.44, 0.02, stringCol)
+		}
 	} else {
 		rl.DrawCube(rl.Vector3{X: 0, Y: 1.62, Z: 0}, 0.46, 0.46, 0.46, tint)
 		rl.DrawCube(rl.Vector3{X: 0, Y: 1.08, Z: 0}, 0.42, 0.68, 0.18, tint)

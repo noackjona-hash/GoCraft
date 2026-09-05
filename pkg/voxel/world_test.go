@@ -201,12 +201,225 @@ func TestWaterSystem(t *testing.T) {
 		t.Fatalf("Expected (0, 14) for BlockWaterFlowing, got (%d, %d)", col, row)
 	}
 	col, row = GetBlockTextureAtlasPos(ItemWaterBucket, FaceTop)
-	if col != 11 || row != 5 {
-		t.Fatalf("Expected (11, 5) for ItemWaterBucket, got (%d, %d)", col, row)
+	if col != 12 || row != 8 {
+		t.Fatalf("Expected (12, 8) for ItemWaterBucket, got (%d, %d)", col, row)
 	}
 	col, row = GetBlockTextureAtlasPos(ItemBucket, FaceTop)
-	if col != 12 || row != 5 {
-		t.Fatalf("Expected (12, 5) for ItemBucket, got (%d, %d)", col, row)
+	if col != 13 || row != 8 {
+		t.Fatalf("Expected (13, 8) for ItemBucket, got (%d, %d)", col, row)
 	}
 }
+
+func TestWaterLevelsAndCornerSmoothing(t *testing.T) {
+	w := NewVoxelWorld()
+	// Solid base at y=10
+	for x := 0; x <= 10; x++ {
+		for z := 0; z <= 10; z++ {
+			w.SetBlock(x, 10, z, BlockStone)
+		}
+	}
+
+	// Source block at (5, 11, 5)
+	w.SetBlock(5, 11, 5, BlockWater)
+	srcH := w.GetWaterHeight(5, 11, 5)
+	if srcH != 0.88 {
+		t.Fatalf("Expected source water height 0.88, got %.2f", srcH)
+	}
+
+	// Flowing water blocks spreading out horizontally
+	w.SetBlock(6, 11, 5, BlockWaterFlowing)
+	dist1H := w.GetWaterHeight(6, 11, 5)
+	if dist1H >= srcH {
+		t.Fatalf("Expected flowing water height (%.2f) to be lower than source (%.2f)", dist1H, srcH)
+	}
+
+	w.SetBlock(7, 11, 5, BlockWaterFlowing)
+	dist2H := w.GetWaterHeight(7, 11, 5)
+	if dist2H >= dist1H {
+		t.Fatalf("Expected distance 2 water height (%.2f) to be lower than distance 1 (%.2f)", dist2H, dist1H)
+	}
+
+	// Corner smoothing
+	cornerH := w.GetWaterCornerHeight(5, 11, 5, 1) // (+X, +Z) corner between source and flowing
+	if cornerH <= dist1H || cornerH >= 1.0 {
+		t.Fatalf("Expected corner height between source and flowing, got %.2f", cornerH)
+	}
+
+	// Waterfall above forces corner to 1.0
+	w.SetBlock(5, 12, 5, BlockWater)
+	wfCornerH := w.GetWaterCornerHeight(5, 11, 5, 0)
+	if wfCornerH != 1.0 {
+		t.Fatalf("Expected waterfall corner height to be 1.0, got %.2f", wfCornerH)
+	}
+}
+
+func TestMiningTiersAndHarvestability(t *testing.T) {
+	// 1. Instant break blocks
+	dur, harvest := GetMiningSpeedAndHarvest(BlockTorch, BlockAir)
+	if dur > 0.1 || !harvest {
+		t.Fatalf("Expected instant break for torch with hand, got dur=%.2f, harvest=%v", dur, harvest)
+	}
+
+	// 2. Stone with bare hand -> No harvest, 7.5s
+	dur, harvest = GetMiningSpeedAndHarvest(BlockStone, BlockAir)
+	if harvest {
+		t.Fatalf("Expected stone with bare hand to NOT drop items!")
+	}
+	if dur != 7.5 {
+		t.Fatalf("Expected stone with bare hand to take 7.5s, got %.2f", dur)
+	}
+
+	// 3. Stone with Wooden Pickaxe -> Harvests, 1.125s
+	dur, harvest = GetMiningSpeedAndHarvest(BlockStone, ItemWoodPickaxe)
+	if !harvest {
+		t.Fatalf("Expected stone with wood pickaxe to harvest cobblestone!")
+	}
+	if dur != 1.125 {
+		t.Fatalf("Expected stone with wood pickaxe to take 1.125s, got %.2f", dur)
+	}
+
+	// 4. Iron Ore with Wooden Pickaxe -> No harvest (tier 1 < 2)
+	dur, harvest = GetMiningSpeedAndHarvest(BlockIronOre, ItemWoodPickaxe)
+	if harvest {
+		t.Fatalf("Expected iron ore with wooden pickaxe to NOT drop items!")
+	}
+
+	// 5. Iron Ore with Stone Pickaxe -> Harvests (tier 2 >= 2)
+	dur, harvest = GetMiningSpeedAndHarvest(BlockIronOre, ItemStonePickaxe)
+	if !harvest {
+		t.Fatalf("Expected iron ore with stone pickaxe to drop items!")
+	}
+
+	// 6. Diamond Ore with Stone Pickaxe -> No harvest (tier 2 < 3)
+	dur, harvest = GetMiningSpeedAndHarvest(BlockDiamondOre, ItemStonePickaxe)
+	if harvest {
+		t.Fatalf("Expected diamond ore with stone pickaxe to NOT drop items!")
+	}
+
+	// 7. Diamond Ore with Iron Pickaxe -> Harvests (tier 3 >= 3)
+	dur, harvest = GetMiningSpeedAndHarvest(BlockDiamondOre, ItemIronPickaxe)
+	if !harvest {
+		t.Fatalf("Expected diamond ore with iron pickaxe to drop diamond!")
+	}
+
+	// 8. Obsidian with Diamond Pickaxe -> Harvests
+	dur, harvest = GetMiningSpeedAndHarvest(BlockObsidian, ItemDiamondPickaxe)
+	if !harvest {
+		t.Fatalf("Expected obsidian with diamond pickaxe to harvest!")
+	}
+	if dur > 10.0 {
+		t.Fatalf("Expected obsidian with diamond pickaxe to take < 10s, got %.2f", dur)
+	}
+
+	// 9. Obsidian with Iron Pickaxe -> No harvest, 41.67s (penalty with pickaxe speed)
+	dur, harvest = GetMiningSpeedAndHarvest(BlockObsidian, ItemIronPickaxe)
+	if harvest {
+		t.Fatalf("Expected obsidian with iron pickaxe to NOT harvest!")
+	}
+	if dur < 40.0 || dur > 45.0 {
+		t.Fatalf("Expected obsidian with iron pickaxe to take ~41.67s, got %.2f", dur)
+	}
+
+	// 10. Obsidian with Bare Fist -> No harvest, 250s
+	dur, harvest = GetMiningSpeedAndHarvest(BlockObsidian, BlockAir)
+	if harvest {
+		t.Fatalf("Expected obsidian with bare fist to NOT harvest!")
+	}
+	if dur != 250.0 {
+		t.Fatalf("Expected obsidian with bare fist to take 250s, got %.2f", dur)
+	}
+
+	// 11. Wood log with bare fist vs Stone Axe
+	durFist, harvestFist := GetMiningSpeedAndHarvest(BlockOakLog, BlockAir)
+	durAxe, harvestAxe := GetMiningSpeedAndHarvest(BlockOakLog, ItemStoneAxe)
+	if !harvestFist || !harvestAxe {
+		t.Fatalf("Expected wood log to always harvest!")
+	}
+	if durAxe >= durFist {
+		t.Fatalf("Expected stone axe (%.2fs) to be much faster than fist (%.2fs)", durAxe, durFist)
+	}
+}
+
+func TestNewItemRegistryAndAtlas(t *testing.T) {
+	newItems := []BlockType{
+		ItemBow, ItemShield, ItemFlintAndSteel, ItemShears, ItemFishingRod,
+		ItemCompass, ItemClock, ItemGoldenPickaxe, ItemGoldenAxe, ItemGoldenShovel,
+		ItemGoldenSword, ItemGoldenApple, ItemCarrot, ItemGoldenCarrot, ItemPotato,
+		ItemBakedPotato, ItemMushroomStew, ItemCookie, ItemRawChicken, ItemCookedChicken,
+		ItemRawMutton, ItemCookedMutton, ItemWheat, ItemWheatSeeds, ItemMelonSlice,
+		ItemSweetBerries, ItemFlint, ItemGoldNugget, ItemIronNugget, ItemRedstone,
+		ItemLapisLazuli, ItemEmerald, ItemString, ItemFeather, ItemLeather,
+		ItemSpiderEye, ItemEnderPearl, ItemSlimeball, ItemBlazeRod, ItemBook,
+		ItemIronHelmet, ItemIronChestplate, ItemIronLeggings, ItemIronBoots,
+		ItemDiamondHelmet, ItemDiamondChestplate, ItemDiamondLeggings, ItemDiamondBoots,
+	}
+
+	for _, item := range newItems {
+		def, exists := BlockRegistry[item]
+		if !exists {
+			t.Fatalf("Expected item %d to be in BlockRegistry", item)
+		}
+		if def.Name == "" {
+			t.Fatalf("Expected item %d to have non-empty name", item)
+		}
+		col, row := GetBlockTextureAtlasPos(item, FaceNorth)
+		if col < 0 || col >= 16 || row < 0 || row >= 16 {
+			t.Fatalf("Expected valid atlas pos for %s, got (%d, %d)", def.Name, col, row)
+		}
+	}
+}
+
+type dummyChunkManager struct{}
+
+func (d *dummyChunkManager) MarkBlockDirty(x, z int) {}
+
+func TestBlockUpdateSystem(t *testing.T) {
+	w := NewVoxelWorld()
+	dcm := &dummyChunkManager{}
+
+	// 1. Floating sand test:
+	// Place sand at (5, 12, 5) with air beneath
+	w.SetBlock(5, 12, 5, BlockSand)
+	w.SetBlock(5, 11, 5, BlockAir)
+	if len(w.ScheduledUpdates) != 0 {
+		t.Fatalf("Expected no physics updates queued on initial placement without block update")
+	}
+
+	// Trigger block update on neighbor
+	w.NotifyNeighbors(5, 11, 5, dcm)
+	if len(w.ScheduledUpdates) == 0 {
+		t.Fatalf("Expected scheduled sand fall update after neighbor update")
+	}
+
+	// Step physics: sand falls down to (5, 11, 5)
+	w.TickScheduledPhysics(0.2, dcm, nil)
+	if w.GetBlock(5, 11, 5) != BlockSand || w.GetBlock(5, 12, 5) != BlockAir {
+		t.Fatalf("Expected sand to fall from (5, 12, 5) to (5, 11, 5), got %v at 12 and %v at 11",
+			w.GetBlock(5, 12, 5), w.GetBlock(5, 11, 5))
+	}
+
+	// 2. Cactus block update test:
+	// Clear 3x3 area around cactus to air
+	for dx := -1; dx <= 1; dx++ {
+		for dz := -1; dz <= 1; dz++ {
+			w.SetBlock(10+dx, 11, 10+dz, BlockAir)
+		}
+	}
+	// Cactus on sand is stable
+	w.SetBlock(10, 10, 10, BlockSand)
+	w.SetBlock(10, 11, 10, BlockCactus)
+	w.TriggerBlockUpdate(10, 11, 10, dcm)
+	if w.GetBlock(10, 11, 10) != BlockCactus {
+		t.Fatalf("Expected cactus on sand to remain stable, got %v", w.GetBlock(10, 11, 10))
+	}
+
+	// Placing solid block next to cactus causes cactus to pop off!
+	w.SetBlock(11, 11, 10, BlockStone)
+	w.NotifyNeighbors(11, 11, 10, dcm)
+	if w.GetBlock(10, 11, 10) != BlockAir {
+		t.Fatalf("Expected cactus to break when solid block is placed adjacent to it, got %v", w.GetBlock(10, 11, 10))
+	}
+}
+
+
 

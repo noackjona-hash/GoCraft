@@ -125,6 +125,64 @@ const (
 	// Buckets
 	ItemBucket
 	ItemWaterBucket
+
+	// Weapons & Utility Gear
+	ItemBow
+	ItemShield
+	ItemFlintAndSteel
+	ItemShears
+	ItemFishingRod
+	ItemCompass
+	ItemClock
+
+	// Golden Tools
+	ItemGoldenPickaxe
+	ItemGoldenAxe
+	ItemGoldenShovel
+	ItemGoldenSword
+
+	// Food & Crops
+	ItemGoldenApple
+	ItemCarrot
+	ItemGoldenCarrot
+	ItemPotato
+	ItemBakedPotato
+	ItemMushroomStew
+	ItemCookie
+	ItemRawChicken
+	ItemCookedChicken
+	ItemRawMutton
+	ItemCookedMutton
+	ItemWheat
+	ItemWheatSeeds
+	ItemMelonSlice
+	ItemSweetBerries
+
+	// Minerals & Crafting Materials
+	ItemFlint
+	ItemGoldNugget
+	ItemIronNugget
+	ItemRedstone
+	ItemLapisLazuli
+	ItemEmerald
+	ItemString
+	ItemFeather
+	ItemLeather
+	ItemSpiderEye
+	ItemEnderPearl
+	ItemSlimeball
+	ItemBlazeRod
+	ItemBook
+
+	// Armor Sets
+	ItemIronHelmet
+	ItemIronChestplate
+	ItemIronLeggings
+	ItemIronBoots
+	ItemDiamondHelmet
+	ItemDiamondChestplate
+	ItemDiamondLeggings
+	ItemDiamondBoots
 )
 
 // BlockDef contains attributes, face colors, and tool mechanics
@@ -415,42 +473,50 @@ var BlockRegistry = map[BlockType]BlockDef{
 		Hardness:    -1.0, // Indestructible
 	},
 	BlockOakLog: {
-		Type:        BlockOakLog,
-		Name:        "Oak Wood Log",
-		TopColor:    rl.NewColor(168, 134, 88, 255),
-		SideColor:   rl.NewColor(103, 82, 49, 255),
-		BottomColor: rl.NewColor(168, 134, 88, 255),
-		IsSolid:     true,
-		Hardness:    1.8,
+		Type:         BlockOakLog,
+		Name:         "Oak Wood Log",
+		TopColor:     rl.NewColor(168, 134, 88, 255),
+		SideColor:    rl.NewColor(103, 82, 49, 255),
+		BottomColor:  rl.NewColor(168, 134, 88, 255),
+		IsSolid:      true,
+		Hardness:     2.0,
+		RequiredTool: "axe",
+		RequiredTier: 0,
 	},
 	BlockOakLogX: {
-		Type:        BlockOakLogX,
-		Name:        "Oak Wood Log",
-		TopColor:    rl.NewColor(103, 82, 49, 255),
-		SideColor:   rl.NewColor(168, 134, 88, 255),
-		BottomColor: rl.NewColor(103, 82, 49, 255),
-		IsSolid:     true,
-		Hardness:    1.8,
-		DropItem:    BlockOakLog,
+		Type:         BlockOakLogX,
+		Name:         "Oak Wood Log",
+		TopColor:     rl.NewColor(103, 82, 49, 255),
+		SideColor:    rl.NewColor(168, 134, 88, 255),
+		BottomColor:  rl.NewColor(103, 82, 49, 255),
+		IsSolid:      true,
+		Hardness:     2.0,
+		DropItem:     BlockOakLog,
+		RequiredTool: "axe",
+		RequiredTier: 0,
 	},
 	BlockOakLogZ: {
-		Type:        BlockOakLogZ,
-		Name:        "Oak Wood Log",
-		TopColor:    rl.NewColor(103, 82, 49, 255),
-		SideColor:   rl.NewColor(168, 134, 88, 255),
-		BottomColor: rl.NewColor(103, 82, 49, 255),
-		IsSolid:     true,
-		Hardness:    1.8,
-		DropItem:    BlockOakLog,
+		Type:         BlockOakLogZ,
+		Name:         "Oak Wood Log",
+		TopColor:     rl.NewColor(103, 82, 49, 255),
+		SideColor:    rl.NewColor(168, 134, 88, 255),
+		BottomColor:  rl.NewColor(103, 82, 49, 255),
+		IsSolid:      true,
+		Hardness:     2.0,
+		DropItem:     BlockOakLog,
+		RequiredTool: "axe",
+		RequiredTier: 0,
 	},
 	BlockOakPlanks: {
-		Type:        BlockOakPlanks,
-		Name:        "Oak Planks",
-		TopColor:    rl.NewColor(162, 130, 78, 255),
-		SideColor:   rl.NewColor(155, 124, 73, 255),
-		BottomColor: rl.NewColor(150, 118, 68, 255),
-		IsSolid:     true,
-		Hardness:    1.2,
+		Type:         BlockOakPlanks,
+		Name:         "Oak Planks",
+		TopColor:     rl.NewColor(162, 130, 78, 255),
+		SideColor:    rl.NewColor(155, 124, 73, 255),
+		BottomColor:  rl.NewColor(150, 118, 68, 255),
+		IsSolid:      true,
+		Hardness:     1.5,
+		RequiredTool: "axe",
+		RequiredTier: 0,
 	},
 	BlockOakLeaves: {
 		Type:          BlockOakLeaves,
@@ -661,13 +727,15 @@ var BlockRegistry = map[BlockType]BlockDef{
 		Hardness:    0.1,
 	},
 	BlockCraftingTable: {
-		Type:        BlockCraftingTable,
-		Name:        "Crafting Table",
-		TopColor:    rl.NewColor(182, 142, 88, 255),
-		SideColor:   rl.NewColor(145, 105, 65, 255),
-		BottomColor: rl.NewColor(135, 95, 58, 255),
-		IsSolid:     true,
-		Hardness:    1.5,
+		Type:         BlockCraftingTable,
+		Name:         "Crafting Table",
+		TopColor:     rl.NewColor(182, 142, 88, 255),
+		SideColor:    rl.NewColor(145, 105, 65, 255),
+		BottomColor:  rl.NewColor(135, 95, 58, 255),
+		IsSolid:      true,
+		Hardness:     1.5,
+		RequiredTool: "axe",
+		RequiredTier: 0,
 	},
 	BlockTorch: {
 		Type:          BlockTorch,
@@ -1259,5 +1327,432 @@ var BlockRegistry = map[BlockType]BlockDef{
 		SideColor: rl.NewColor(180, 180, 180, 255),
 		IsSolid:   false,
 		Hardness:  0.1,
+	},
+
+	// Weapons & Utility Gear
+	ItemBow: {
+		Type:          ItemBow,
+		Name:          "Bow",
+		TopColor:      rl.NewColor(135, 95, 50, 255),
+		SideColor:     rl.NewColor(135, 95, 50, 255),
+		IsSolid:       false,
+		IsTool:        true,
+		ToolType:      "bow",
+		MaxDurability: 384,
+		AttackDamage:  6.0,
+	},
+	ItemShield: {
+		Type:          ItemShield,
+		Name:          "Shield",
+		TopColor:      rl.NewColor(165, 165, 175, 255),
+		SideColor:     rl.NewColor(140, 100, 60, 255),
+		IsSolid:       false,
+		IsTool:        true,
+		ToolType:      "shield",
+		MaxDurability: 336,
+	},
+	ItemFlintAndSteel: {
+		Type:          ItemFlintAndSteel,
+		Name:          "Flint and Steel",
+		TopColor:      rl.NewColor(190, 190, 195, 255),
+		SideColor:     rl.NewColor(50, 50, 55, 255),
+		IsSolid:       false,
+		IsTool:        true,
+		MaxDurability: 64,
+	},
+	ItemShears: {
+		Type:          ItemShears,
+		Name:          "Shears",
+		TopColor:      rl.NewColor(190, 190, 195, 255),
+		SideColor:     rl.NewColor(190, 190, 195, 255),
+		IsSolid:       false,
+		IsTool:        true,
+		ToolType:      "shears",
+		MaxDurability: 238,
+	},
+	ItemFishingRod: {
+		Type:          ItemFishingRod,
+		Name:          "Fishing Rod",
+		TopColor:      rl.NewColor(140, 100, 60, 255),
+		SideColor:     rl.NewColor(140, 100, 60, 255),
+		IsSolid:       false,
+		IsTool:        true,
+		MaxDurability: 64,
+	},
+	ItemCompass: {
+		Type:      ItemCompass,
+		Name:      "Compass",
+		TopColor:  rl.NewColor(160, 160, 165, 255),
+		SideColor: rl.NewColor(160, 160, 165, 255),
+		IsSolid:   false,
+	},
+	ItemClock: {
+		Type:      ItemClock,
+		Name:      "Clock",
+		TopColor:  rl.NewColor(225, 200, 50, 255),
+		SideColor: rl.NewColor(225, 200, 50, 255),
+		IsSolid:   false,
+	},
+
+	// Golden Tools
+	ItemGoldenPickaxe: {
+		Type:             ItemGoldenPickaxe,
+		Name:             "Golden Pickaxe",
+		TopColor:         rl.NewColor(245, 215, 60, 255),
+		SideColor:        rl.NewColor(245, 215, 60, 255),
+		IsSolid:          false,
+		IsTool:           true,
+		ToolType:         "pickaxe",
+		ToolTier:         1,
+		MiningEfficiency: 12.0,
+		MaxDurability:    32,
+		AttackDamage:     2.0,
+	},
+	ItemGoldenAxe: {
+		Type:             ItemGoldenAxe,
+		Name:             "Golden Axe",
+		TopColor:         rl.NewColor(245, 215, 60, 255),
+		SideColor:        rl.NewColor(245, 215, 60, 255),
+		IsSolid:          false,
+		IsTool:           true,
+		ToolType:         "axe",
+		ToolTier:         1,
+		MiningEfficiency: 12.0,
+		MaxDurability:    32,
+		AttackDamage:     7.0,
+	},
+	ItemGoldenShovel: {
+		Type:             ItemGoldenShovel,
+		Name:             "Golden Shovel",
+		TopColor:         rl.NewColor(245, 215, 60, 255),
+		SideColor:        rl.NewColor(245, 215, 60, 255),
+		IsSolid:          false,
+		IsTool:           true,
+		ToolType:         "shovel",
+		ToolTier:         1,
+		MiningEfficiency: 12.0,
+		MaxDurability:    32,
+		AttackDamage:     2.5,
+	},
+	ItemGoldenSword: {
+		Type:          ItemGoldenSword,
+		Name:          "Golden Sword",
+		TopColor:      rl.NewColor(245, 215, 60, 255),
+		SideColor:     rl.NewColor(245, 215, 60, 255),
+		IsSolid:       false,
+		IsTool:        true,
+		ToolType:      "sword",
+		ToolTier:      1,
+		MaxDurability: 32,
+		AttackDamage:  4.0,
+	},
+
+	// Food & Crops
+	ItemGoldenApple: {
+		Type:       ItemGoldenApple,
+		Name:       "Golden Apple",
+		TopColor:   rl.NewColor(250, 215, 45, 255),
+		SideColor:  rl.NewColor(250, 215, 45, 255),
+		IsSolid:    false,
+		IsFood:     true,
+		FoodPoints: 20.0, // Full heal!
+	},
+	ItemCarrot: {
+		Type:       ItemCarrot,
+		Name:       "Carrot",
+		TopColor:   rl.NewColor(240, 120, 25, 255),
+		SideColor:  rl.NewColor(240, 120, 25, 255),
+		IsSolid:    false,
+		IsFood:     true,
+		FoodPoints: 3.0,
+	},
+	ItemGoldenCarrot: {
+		Type:       ItemGoldenCarrot,
+		Name:       "Golden Carrot",
+		TopColor:   rl.NewColor(245, 210, 50, 255),
+		SideColor:  rl.NewColor(245, 210, 50, 255),
+		IsSolid:    false,
+		IsFood:     true,
+		FoodPoints: 6.0,
+	},
+	ItemPotato: {
+		Type:       ItemPotato,
+		Name:       "Potato",
+		TopColor:   rl.NewColor(195, 160, 95, 255),
+		SideColor:  rl.NewColor(195, 160, 95, 255),
+		IsSolid:    false,
+		IsFood:     true,
+		FoodPoints: 1.0,
+	},
+	ItemBakedPotato: {
+		Type:       ItemBakedPotato,
+		Name:       "Baked Potato",
+		TopColor:   rl.NewColor(175, 125, 65, 255),
+		SideColor:  rl.NewColor(175, 125, 65, 255),
+		IsSolid:    false,
+		IsFood:     true,
+		FoodPoints: 5.0,
+	},
+	ItemMushroomStew: {
+		Type:       ItemMushroomStew,
+		Name:       "Mushroom Stew",
+		TopColor:   rl.NewColor(185, 135, 100, 255),
+		SideColor:  rl.NewColor(185, 135, 100, 255),
+		IsSolid:    false,
+		IsFood:     true,
+		FoodPoints: 6.0,
+	},
+	ItemCookie: {
+		Type:       ItemCookie,
+		Name:       "Cookie",
+		TopColor:   rl.NewColor(195, 140, 80, 255),
+		SideColor:  rl.NewColor(195, 140, 80, 255),
+		IsSolid:    false,
+		IsFood:     true,
+		FoodPoints: 2.0,
+	},
+	ItemRawChicken: {
+		Type:       ItemRawChicken,
+		Name:       "Raw Chicken",
+		TopColor:   rl.NewColor(220, 160, 145, 255),
+		SideColor:  rl.NewColor(220, 160, 145, 255),
+		IsSolid:    false,
+		IsFood:     true,
+		FoodPoints: 2.0,
+	},
+	ItemCookedChicken: {
+		Type:       ItemCookedChicken,
+		Name:       "Cooked Chicken",
+		TopColor:   rl.NewColor(170, 110, 60, 255),
+		SideColor:  rl.NewColor(170, 110, 60, 255),
+		IsSolid:    false,
+		IsFood:     true,
+		FoodPoints: 6.0,
+	},
+	ItemRawMutton: {
+		Type:       ItemRawMutton,
+		Name:       "Raw Mutton",
+		TopColor:   rl.NewColor(200, 110, 110, 255),
+		SideColor:  rl.NewColor(200, 110, 110, 255),
+		IsSolid:    false,
+		IsFood:     true,
+		FoodPoints: 2.0,
+	},
+	ItemCookedMutton: {
+		Type:       ItemCookedMutton,
+		Name:       "Cooked Mutton",
+		TopColor:   rl.NewColor(140, 75, 45, 255),
+		SideColor:  rl.NewColor(140, 75, 45, 255),
+		IsSolid:    false,
+		IsFood:     true,
+		FoodPoints: 6.0,
+	},
+	ItemWheat: {
+		Type:      ItemWheat,
+		Name:      "Wheat",
+		TopColor:  rl.NewColor(215, 190, 60, 255),
+		SideColor: rl.NewColor(215, 190, 60, 255),
+		IsSolid:   false,
+	},
+	ItemWheatSeeds: {
+		Type:      ItemWheatSeeds,
+		Name:      "Wheat Seeds",
+		TopColor:  rl.NewColor(120, 150, 70, 255),
+		SideColor: rl.NewColor(120, 150, 70, 255),
+		IsSolid:   false,
+	},
+	ItemMelonSlice: {
+		Type:       ItemMelonSlice,
+		Name:       "Melon Slice",
+		TopColor:   rl.NewColor(210, 60, 45, 255),
+		SideColor:  rl.NewColor(210, 60, 45, 255),
+		IsSolid:    false,
+		IsFood:     true,
+		FoodPoints: 2.0,
+	},
+	ItemSweetBerries: {
+		Type:       ItemSweetBerries,
+		Name:       "Sweet Berries",
+		TopColor:   rl.NewColor(185, 30, 35, 255),
+		SideColor:  rl.NewColor(185, 30, 35, 255),
+		IsSolid:    false,
+		IsFood:     true,
+		FoodPoints: 2.0,
+	},
+
+	// Minerals & Crafting Materials
+	ItemFlint: {
+		Type:      ItemFlint,
+		Name:      "Flint",
+		TopColor:  rl.NewColor(55, 55, 60, 255),
+		SideColor: rl.NewColor(55, 55, 60, 255),
+		IsSolid:   false,
+	},
+	ItemGoldNugget: {
+		Type:      ItemGoldNugget,
+		Name:      "Gold Nugget",
+		TopColor:  rl.NewColor(245, 215, 50, 255),
+		SideColor: rl.NewColor(245, 215, 50, 255),
+		IsSolid:   false,
+	},
+	ItemIronNugget: {
+		Type:      ItemIronNugget,
+		Name:      "Iron Nugget",
+		TopColor:  rl.NewColor(210, 210, 215, 255),
+		SideColor: rl.NewColor(210, 210, 215, 255),
+		IsSolid:   false,
+	},
+	ItemRedstone: {
+		Type:      ItemRedstone,
+		Name:      "Redstone Dust",
+		TopColor:  rl.NewColor(220, 30, 25, 255),
+		SideColor: rl.NewColor(220, 30, 25, 255),
+		IsSolid:   false,
+	},
+	ItemLapisLazuli: {
+		Type:      ItemLapisLazuli,
+		Name:      "Lapis Lazuli",
+		TopColor:  rl.NewColor(30, 75, 185, 255),
+		SideColor: rl.NewColor(30, 75, 185, 255),
+		IsSolid:   false,
+	},
+	ItemEmerald: {
+		Type:      ItemEmerald,
+		Name:      "Emerald",
+		TopColor:  rl.NewColor(25, 205, 75, 255),
+		SideColor: rl.NewColor(25, 205, 75, 255),
+		IsSolid:   false,
+	},
+	ItemString: {
+		Type:      ItemString,
+		Name:      "String",
+		TopColor:  rl.NewColor(230, 230, 230, 255),
+		SideColor: rl.NewColor(230, 230, 230, 255),
+		IsSolid:   false,
+	},
+	ItemFeather: {
+		Type:      ItemFeather,
+		Name:      "Feather",
+		TopColor:  rl.NewColor(245, 245, 250, 255),
+		SideColor: rl.NewColor(245, 245, 250, 255),
+		IsSolid:   false,
+	},
+	ItemLeather: {
+		Type:      ItemLeather,
+		Name:      "Leather",
+		TopColor:  rl.NewColor(165, 95, 55, 255),
+		SideColor: rl.NewColor(165, 95, 55, 255),
+		IsSolid:   false,
+	},
+	ItemSpiderEye: {
+		Type:      ItemSpiderEye,
+		Name:      "Spider Eye",
+		TopColor:  rl.NewColor(140, 25, 30, 255),
+		SideColor: rl.NewColor(140, 25, 30, 255),
+		IsSolid:   false,
+	},
+	ItemEnderPearl: {
+		Type:      ItemEnderPearl,
+		Name:      "Ender Pearl",
+		TopColor:  rl.NewColor(25, 95, 90, 255),
+		SideColor: rl.NewColor(25, 95, 90, 255),
+		IsSolid:   false,
+	},
+	ItemSlimeball: {
+		Type:      ItemSlimeball,
+		Name:      "Slimeball",
+		TopColor:  rl.NewColor(115, 205, 85, 255),
+		SideColor: rl.NewColor(115, 205, 85, 255),
+		IsSolid:   false,
+	},
+	ItemBlazeRod: {
+		Type:      ItemBlazeRod,
+		Name:      "Blaze Rod",
+		TopColor:  rl.NewColor(245, 175, 35, 255),
+		SideColor: rl.NewColor(245, 175, 35, 255),
+		IsSolid:   false,
+	},
+	ItemBook: {
+		Type:      ItemBook,
+		Name:      "Book",
+		TopColor:  rl.NewColor(145, 80, 45, 255),
+		SideColor: rl.NewColor(145, 80, 45, 255),
+		IsSolid:   false,
+	},
+
+	// Iron Armor
+	ItemIronHelmet: {
+		Type:          ItemIronHelmet,
+		Name:          "Iron Helmet",
+		TopColor:      rl.NewColor(210, 210, 215, 255),
+		SideColor:     rl.NewColor(210, 210, 215, 255),
+		IsSolid:       false,
+		IsTool:        true,
+		MaxDurability: 165,
+	},
+	ItemIronChestplate: {
+		Type:          ItemIronChestplate,
+		Name:          "Iron Chestplate",
+		TopColor:      rl.NewColor(210, 210, 215, 255),
+		SideColor:     rl.NewColor(210, 210, 215, 255),
+		IsSolid:       false,
+		IsTool:        true,
+		MaxDurability: 240,
+	},
+	ItemIronLeggings: {
+		Type:          ItemIronLeggings,
+		Name:          "Iron Leggings",
+		TopColor:      rl.NewColor(210, 210, 215, 255),
+		SideColor:     rl.NewColor(210, 210, 215, 255),
+		IsSolid:       false,
+		IsTool:        true,
+		MaxDurability: 225,
+	},
+	ItemIronBoots: {
+		Type:          ItemIronBoots,
+		Name:          "Iron Boots",
+		TopColor:      rl.NewColor(210, 210, 215, 255),
+		SideColor:     rl.NewColor(210, 210, 215, 255),
+		IsSolid:       false,
+		IsTool:        true,
+		MaxDurability: 195,
+	},
+
+	// Diamond Armor
+	ItemDiamondHelmet: {
+		Type:          ItemDiamondHelmet,
+		Name:          "Diamond Helmet",
+		TopColor:      rl.NewColor(60, 230, 220, 255),
+		SideColor:     rl.NewColor(60, 230, 220, 255),
+		IsSolid:       false,
+		IsTool:        true,
+		MaxDurability: 363,
+	},
+	ItemDiamondChestplate: {
+		Type:          ItemDiamondChestplate,
+		Name:          "Diamond Chestplate",
+		TopColor:      rl.NewColor(60, 230, 220, 255),
+		SideColor:     rl.NewColor(60, 230, 220, 255),
+		IsSolid:       false,
+		IsTool:        true,
+		MaxDurability: 528,
+	},
+	ItemDiamondLeggings: {
+		Type:          ItemDiamondLeggings,
+		Name:          "Diamond Leggings",
+		TopColor:      rl.NewColor(60, 230, 220, 255),
+		SideColor:     rl.NewColor(60, 230, 220, 255),
+		IsSolid:       false,
+		IsTool:        true,
+		MaxDurability: 495,
+	},
+	ItemDiamondBoots: {
+		Type:          ItemDiamondBoots,
+		Name:          "Diamond Boots",
+		TopColor:      rl.NewColor(60, 230, 220, 255),
+		SideColor:     rl.NewColor(60, 230, 220, 255),
+		IsSolid:       false,
+		IsTool:        true,
+		MaxDurability: 429,
 	},
 }

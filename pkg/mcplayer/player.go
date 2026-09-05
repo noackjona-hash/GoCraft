@@ -179,8 +179,9 @@ type MCPlayer struct {
 	FallDistance float32
 
 	// Survival timers.
-	RegenTimer float32
-	DrownTimer float32
+	RegenTimer       float32
+	DrownTimer       float32
+	SuffocationTimer float32
 
 	// Death state.
 	IsDead     bool
@@ -376,9 +377,9 @@ func (p *MCPlayer) Update(dt float32, world *voxel.VoxelWorld) {
 	// 6. Voxel AABB collision & resolution.
 	p.moveWithVoxelCollision(moveVec.X*dt, p.Vel.Y*dt, moveVec.Z*dt, world)
 
-	// 7. Survival mechanics (drowning, hunger, regen).
+	// 7. Survival mechanics (drowning, hunger, regen, suffocation).
 	if p.Mode == GameModeSurvival {
-		p.handleSurvivalMechanics(dt)
+		p.handleSurvivalMechanics(dt, world)
 	}
 
 	// 8. Particle & Animation update.
@@ -479,19 +480,27 @@ func (p *MCPlayer) handleMovementInput(dt float32) (rl.Vector3, bool) {
 	if p.DoubleTapTimer > 0 {
 		p.DoubleTapTimer -= dt
 	}
-	// Ctrl also activates sprint; shift sprint kept for backward compat.
-	if rl.IsKeyDown(rl.KeyLeftControl) || (rl.IsKeyDown(rl.KeyLeftShift) && isMoving) {
+	// Ctrl activates sprint
+	if rl.IsKeyDown(rl.KeyLeftControl) {
 		p.IsSprinting = true
 	}
-	// Cancel sprint if W is released or player stops moving.
-	if !wDown || !isMoving {
+	// Cancel sprint if W is released, player stops moving, or player sneaks.
+	if !wDown || !isMoving || p.IsSneaking {
 		p.IsSprinting = false
 	}
 
-	// Sneak.
-	p.IsSneaking = rl.IsKeyDown(rl.KeyC)
+	// Sneak: LeftShift, RightShift, or C
+	p.IsSneaking = rl.IsKeyDown(rl.KeyLeftShift) || rl.IsKeyDown(rl.KeyRightShift) || rl.IsKeyDown(rl.KeyC)
+	if p.IsSneaking {
+		p.IsSprinting = false
+	}
 
 	return moveVec, isMoving
+}
+
+// IsCriticalStrike returns true if the player is airborne and falling (classic Minecraft jump-crit)
+func (p *MCPlayer) IsCriticalStrike() bool {
+	return p.Vel.Y < -0.1 && !p.IsGrounded && !p.IsSwimming
 }
 
 // ---------------------------------------------------------------------------
@@ -578,7 +587,7 @@ func (p *MCPlayer) handleJumpAndSwim(dt float32, forward rl.Vector3, world *voxe
 
 // handleSurvivalMechanics manages drowning, oxygen, hunger-based regen,
 // and starvation damage.
-func (p *MCPlayer) handleSurvivalMechanics(dt float32) {
+func (p *MCPlayer) handleSurvivalMechanics(dt float32, world *voxel.VoxelWorld) {
 	// Drowning.
 	if p.IsSubmerged {
 		p.Oxygen -= dt * OxygenDrainRate
@@ -593,6 +602,23 @@ func (p *MCPlayer) handleSurvivalMechanics(dt float32) {
 	} else {
 		p.Oxygen = 10.0
 		p.DrownTimer = 0
+	}
+
+	// Suffocation damage (head inside solid non-transparent block)
+	if world != nil {
+		hx := int(floor32(p.Pos.X))
+		hy := int(floor32(p.Pos.Y + StandEyeHeight))
+		hz := int(floor32(p.Pos.Z))
+		headBlock := world.GetBlock(hx, hy, hz)
+		if def, ok := voxel.BlockRegistry[headBlock]; ok && def.IsSolid && !def.IsTransparent {
+			p.SuffocationTimer += dt
+			if p.SuffocationTimer >= 0.5 {
+				p.Health = clamp32(p.Health-1.0, 0, 20)
+				p.SuffocationTimer = 0
+			}
+		} else {
+			p.SuffocationTimer = 0
+		}
 	}
 
 	// Health regeneration (high hunger).
@@ -846,8 +872,8 @@ func (p *MCPlayer) RenderParticles(atlas *voxel.TextureAtlas) {
 
 // RenderHandAndHeldBlock draws the authentic Minecraft first-person viewmodel
 // with authentic 3D swing kinematics (sin of sqrt progress, pitch chop, roll, yaw),
-// item switch equip slide, and walking bobbing.
-func (p *MCPlayer) RenderHandAndHeldBlock(heldBlock voxel.BlockType, atlas *voxel.TextureAtlas) {
+// item switch equip slide, walking bobbing, and off-hand dual-wielding.
+func (p *MCPlayer) RenderHandAndHeldBlock(heldBlock voxel.BlockType, offhandBlock voxel.BlockType, atlas *voxel.TextureAtlas) {
 	if p.Perspective != PerspectiveFirstPerson || atlas == nil || atlas.Texture.ID == 0 {
 		return
 	}
@@ -1091,6 +1117,97 @@ func (p *MCPlayer) RenderHandAndHeldBlock(heldBlock voxel.BlockType, atlas *voxe
 		// Steve Arm supporting block:
 		drawBox(0.01, -0.14, -0.16, 0.09, -0.06, -0.04, shirtU0, shirtV0, shirtU1, shirtV1, rl.White)
 		drawBox(0.015, -0.13, -0.04, 0.085, -0.07, 0.06, skinU0, skinV0, skinU1, skinV1, rl.White)
+	}
+
+	// Offhand 1st Person Left Arm & Held Item/Block
+	if offhandBlock != voxel.BlockAir {
+		pivotLX := float32(-0.28)
+		pivotLY := float32(-0.24)
+		pivotLZ := float32(0.34)
+
+		baseOffRotX := float32(-18.0 * (math.Pi / 180.0))
+		baseOffRotY := float32(28.0 * (math.Pi / 180.0)) // Angled outward
+		baseOffRotZ := float32(10.0 * (math.Pi / 180.0))
+
+		cosLX := cos32(baseOffRotX)
+		sinLX := sin32(baseOffRotX)
+		cosLY := cos32(baseOffRotY)
+		sinLY := sin32(baseOffRotY)
+		cosLZ := cos32(baseOffRotZ)
+		sinLZ := sin32(baseOffRotZ)
+
+		vtxLeftTransformed := func(lx, ly, lz float32, u, v float32) {
+			dx := lx
+			dy := ly
+			dz := lz
+			y1 := dy*cosLX - dz*sinLX
+			z1 := dy*sinLX + dz*cosLX
+			x2 := dx*cosLY + z1*sinLY
+			z2 := -dx*sinLY + z1*cosLY
+			x3 := x2*cosLZ - y1*sinLZ
+			y3 := x2*sinLZ + y1*cosLZ
+
+			worldP := rl.Vector3Add(cam.Position,
+				rl.Vector3Add(
+					rl.Vector3Scale(forward, pivotLZ+z2),
+					rl.Vector3Add(
+						rl.Vector3Scale(right, pivotLX+x3+bobX),
+						rl.Vector3Scale(up, pivotLY+y3+bobY),
+					),
+				),
+			)
+			rl.TexCoord2f(u, v)
+			rl.Vertex3f(worldP.X, worldP.Y, worldP.Z)
+		}
+
+		drawLeftBox := func(x0, y0, z0, x1, y1, z1 float32, u0, v0, u1, v1 float32, tint rl.Color) {
+			rl.Color4ub(tint.R, tint.G, tint.B, tint.A)
+			// Front (+Z)
+			vtxLeftTransformed(x1, y0, z1, u1, v1)
+			vtxLeftTransformed(x0, y0, z1, u0, v1)
+			vtxLeftTransformed(x0, y1, z1, u0, v0)
+			vtxLeftTransformed(x1, y1, z1, u1, v0)
+
+			// Back (-Z)
+			vtxLeftTransformed(x0, y0, z0, u1, v1)
+			vtxLeftTransformed(x1, y0, z0, u0, v1)
+			vtxLeftTransformed(x1, y1, z0, u0, v0)
+			vtxLeftTransformed(x0, y1, z0, u1, v0)
+
+			// Top (+Y)
+			vtxLeftTransformed(x0, y1, z1, u0, v1)
+			vtxLeftTransformed(x1, y1, z1, u1, v1)
+			vtxLeftTransformed(x1, y1, z0, u1, v0)
+			vtxLeftTransformed(x0, y1, z0, u0, v0)
+
+			// Bottom (-Y)
+			vtxLeftTransformed(x0, y0, z0, u0, v1)
+			vtxLeftTransformed(x1, y0, z0, u1, v1)
+			vtxLeftTransformed(x1, y0, z1, u1, v0)
+			vtxLeftTransformed(x0, y0, z1, u0, v0)
+
+			// Left (-X)
+			vtxLeftTransformed(x0, y0, z0, u0, v1)
+			vtxLeftTransformed(x0, y0, z1, u1, v1)
+			vtxLeftTransformed(x0, y1, z1, u1, v0)
+			vtxLeftTransformed(x0, y1, z0, u0, v0)
+
+			// Right (+X)
+			vtxLeftTransformed(x1, y0, z1, u0, v1)
+			vtxLeftTransformed(x1, y0, z0, u1, v1)
+			vtxLeftTransformed(x1, y1, z0, u1, v0)
+			vtxLeftTransformed(x1, y1, z1, u0, v0)
+		}
+
+		// Left Steve Arm
+		drawLeftBox(-0.06, -0.22, -0.20, 0.04, -0.08, -0.04, shirtU0, shirtV0, shirtU1, shirtV1, rl.White)
+		drawLeftBox(-0.05, -0.20, -0.04, 0.03, -0.10, 0.08, skinU0, skinV0, skinU1, skinV1, rl.White)
+
+		// Offhand Item / Block in hand
+		bx, by, bz := float32(-0.01), float32(-0.08), float32(0.12)
+		hs := float32(0.065)
+		u0, v0, u1, v1 := voxel.GetBlockTextureUVs(offhandBlock, voxel.FaceTop)
+		drawLeftBox(bx-hs, by-hs, bz-hs, bx+hs, by+hs, bz+hs, u0, v0, u1, v1, rl.White)
 	}
 
 	rl.End()

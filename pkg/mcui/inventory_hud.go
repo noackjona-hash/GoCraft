@@ -38,7 +38,9 @@ type InventoryGUI struct {
 	FurnaceMaxBurnTime  float32
 	FurnaceCookProgress float32 // 0.0 to 1.0
 
-	CursorItem ItemStack
+	CursorItem  ItemStack
+	OffhandSlot ItemStack
+	Minimap     *Minimap
 
 	// Authentic Minecraft GUI Textures from Resource Pack
 	WidgetsTex   rl.Texture2D
@@ -56,6 +58,7 @@ func NewInventoryGUI(screenWidth, screenHeight int32) *InventoryGUI {
 		ScreenHeight:     screenHeight,
 		SelectedSlot:     0,
 		IsRecipeBookOpen: false,
+		Minimap:          NewMinimap(),
 	}
 
 	gui.LoadTextures()
@@ -132,8 +135,74 @@ func (gui *InventoryGUI) ConsumeActiveItem() {
 // SetActiveSlotItem sets the item type and count of the currently active hotbar slot
 func (gui *InventoryGUI) SetActiveSlotItem(bType voxel.BlockType, count int) {
 	if gui.SelectedSlot >= 0 && gui.SelectedSlot < 9 {
-		gui.HotbarSlots[gui.SelectedSlot] = ItemStack{Type: bType, Count: count}
+		item := ItemStack{Type: bType, Count: count}
+		if bDef, ok := voxel.BlockRegistry[bType]; ok && bDef.IsTool && bDef.MaxDurability > 0 {
+			item.Durability = bDef.MaxDurability
+			item.MaxDurability = bDef.MaxDurability
+		}
+		gui.HotbarSlots[gui.SelectedSlot] = item
 	}
+}
+
+// SwapOffhand swaps the active hotbar slot with the offhand slot (Minecraft 'F' key)
+func (gui *InventoryGUI) SwapOffhand() {
+	if gui.SelectedSlot >= 0 && gui.SelectedSlot < 9 {
+		tmp := gui.HotbarSlots[gui.SelectedSlot]
+		gui.HotbarSlots[gui.SelectedSlot] = gui.OffhandSlot
+		gui.OffhandSlot = tmp
+	}
+}
+
+// GetOffhandBlock returns the item type in offhand
+func (gui *InventoryGUI) GetOffhandBlock() voxel.BlockType {
+	if gui.OffhandSlot.Count > 0 {
+		return gui.OffhandSlot.Type
+	}
+	return voxel.BlockAir
+}
+
+// ConsumeOffhandItem decrements offhand item count
+func (gui *InventoryGUI) ConsumeOffhandItem() {
+	if gui.OffhandSlot.Count > 0 {
+		gui.OffhandSlot.Count--
+		if gui.OffhandSlot.Count == 0 {
+			gui.OffhandSlot.Type = voxel.BlockAir
+			gui.OffhandSlot.Durability = 0
+			gui.OffhandSlot.MaxDurability = 0
+		}
+	}
+}
+
+// DamageActiveTool decreases durability of the active item by amount.
+// Returns true if the tool broke and was removed.
+func (gui *InventoryGUI) DamageActiveTool(amount int) bool {
+	if gui.SelectedSlot < 0 || gui.SelectedSlot >= 9 {
+		return false
+	}
+	slot := &gui.HotbarSlots[gui.SelectedSlot]
+	if slot.Type == voxel.BlockAir || slot.Count == 0 {
+		return false
+	}
+	bDef, exists := voxel.BlockRegistry[slot.Type]
+	if !exists || !bDef.IsTool || bDef.MaxDurability <= 0 {
+		return false
+	}
+
+	// Initialize durability if not set
+	if slot.MaxDurability == 0 {
+		slot.MaxDurability = bDef.MaxDurability
+		slot.Durability = bDef.MaxDurability
+	}
+
+	slot.Durability -= amount
+	if slot.Durability <= 0 {
+		slot.Type = voxel.BlockAir
+		slot.Count = 0
+		slot.Durability = 0
+		slot.MaxDurability = 0
+		return true // Tool broke!
+	}
+	return false
 }
 
 // RemoveActiveItem removes up to count items from the currently selected hotbar slot and returns the amount actually removed
@@ -153,6 +222,67 @@ func (gui *InventoryGUI) RemoveActiveItem(count int) int {
 		}
 	}
 	return 0
+}
+
+// RemoveItem removes up to count items of bType across hotbar, offhand, and main inventory
+func (gui *InventoryGUI) RemoveItem(bType voxel.BlockType, count int) int {
+	removed := 0
+
+	// 1. Hotbar
+	for i := 0; i < 9; i++ {
+		slot := &gui.HotbarSlots[i]
+		if slot.Type == bType && slot.Count > 0 {
+			take := slot.Count
+			if take > count-removed {
+				take = count - removed
+			}
+			slot.Count -= take
+			removed += take
+			if slot.Count == 0 {
+				slot.Type = voxel.BlockAir
+			}
+			if removed >= count {
+				return removed
+			}
+		}
+	}
+
+	// 2. Off-hand
+	if gui.OffhandSlot.Type == bType && gui.OffhandSlot.Count > 0 {
+		take := gui.OffhandSlot.Count
+		if take > count-removed {
+			take = count - removed
+		}
+		gui.OffhandSlot.Count -= take
+		removed += take
+		if gui.OffhandSlot.Count == 0 {
+			gui.OffhandSlot.Type = voxel.BlockAir
+		}
+		if removed >= count {
+			return removed
+		}
+	}
+
+	// 3. Main inventory
+	for i := 0; i < 27; i++ {
+		slot := &gui.MainInventory[i]
+		if slot.Type == bType && slot.Count > 0 {
+			take := slot.Count
+			if take > count-removed {
+				take = count - removed
+			}
+			slot.Count -= take
+			removed += take
+			if slot.Count == 0 {
+				slot.Type = voxel.BlockAir
+			}
+			if removed >= count {
+				return removed
+			}
+		}
+	}
+
+	return removed
 }
 
 // AddItem tries to add count of bType into existing stacks, then empty slots
@@ -195,6 +325,10 @@ func (gui *InventoryGUI) AddItem(bType voxel.BlockType, count int) bool {
 		if slot.Type == voxel.BlockAir || slot.Count == 0 {
 			slot.Type = bType
 			slot.Count = count
+			if bDef, ok := voxel.BlockRegistry[bType]; ok && bDef.IsTool && bDef.MaxDurability > 0 {
+				slot.Durability = bDef.MaxDurability
+				slot.MaxDurability = bDef.MaxDurability
+			}
 			return true
 		}
 	}
@@ -205,6 +339,10 @@ func (gui *InventoryGUI) AddItem(bType voxel.BlockType, count int) bool {
 		if slot.Type == voxel.BlockAir || slot.Count == 0 {
 			slot.Type = bType
 			slot.Count = count
+			if bDef, ok := voxel.BlockRegistry[bType]; ok && bDef.IsTool && bDef.MaxDurability > 0 {
+				slot.Durability = bDef.MaxDurability
+				slot.MaxDurability = bDef.MaxDurability
+			}
 			return true
 		}
 	}
@@ -369,6 +507,14 @@ func GetSmeltingResult(input voxel.BlockType) (voxel.BlockType, bool) {
 		return voxel.ItemCookedPorkchop, true
 	case voxel.ItemRawBeef:
 		return voxel.ItemCookedBeef, true
+	case voxel.ItemRawChicken:
+		return voxel.ItemCookedChicken, true
+	case voxel.ItemRawMutton:
+		return voxel.ItemCookedMutton, true
+	case voxel.ItemPotato:
+		return voxel.ItemBakedPotato, true
+	case voxel.BlockClay:
+		return voxel.BlockBricks, true
 	case voxel.BlockIronOre:
 		return voxel.ItemIronIngot, true
 	case voxel.BlockGoldOre:
@@ -377,7 +523,7 @@ func GetSmeltingResult(input voxel.BlockType) (voxel.BlockType, bool) {
 		return voxel.BlockGlass, true
 	case voxel.BlockCobblestone:
 		return voxel.BlockStone, true
-	case voxel.BlockOakLog:
+	case voxel.BlockOakLog, voxel.BlockBirchLog, voxel.BlockSpruceLog:
 		return voxel.ItemCoal, true // Charcoal
 	default:
 		return voxel.BlockAir, false
@@ -387,9 +533,11 @@ func GetSmeltingResult(input voxel.BlockType) (voxel.BlockType, bool) {
 // GetFuelBurnTime returns duration in seconds a fuel item burns
 func GetFuelBurnTime(fuel voxel.BlockType) float32 {
 	switch fuel {
+	case voxel.ItemBlazeRod:
+		return 120.0 // Super fuel (smelts 30 items!)
 	case voxel.ItemCoal, voxel.BlockCoalOre:
 		return 16.0 // Smelts 4 items
-	case voxel.BlockOakLog, voxel.BlockOakPlanks, voxel.BlockCraftingTable:
+	case voxel.BlockOakLog, voxel.BlockOakPlanks, voxel.BlockCraftingTable, voxel.BlockSpruceLog, voxel.BlockBirchLog:
 		return 6.0 // Smelts 1.5 items
 	case voxel.ItemStick:
 		return 2.0 // Smelts 0.5 items
@@ -841,6 +989,14 @@ func (gui *InventoryGUI) renderHotbar(x, y, slotSize float32, atlas *voxel.Textu
 		srcSel := rl.NewRectangle(0, 22, 24, 24)
 		dstSel := rl.NewRectangle(selX, selY, 24.0*scale*2.0, 24.0*scale*2.0)
 		rl.DrawTexturePro(gui.WidgetsTex, srcSel, dstSel, rl.Vector2{}, 0, rl.White)
+
+		// 4. Off-hand slot on the left side of hotbar (Minecraft 1.9+ Java style)
+		offX := startX - 29.0*scale*2.0 - 4.0*scale
+		offY := startY
+		srcOff := rl.NewRectangle(24, 22, 29, 24)
+		dstOff := rl.NewRectangle(offX, offY-1.0*scale*2.0, 29.0*scale*2.0, 24.0*scale*2.0)
+		rl.DrawTexturePro(gui.WidgetsTex, srcOff, dstOff, rl.Vector2{}, 0, rl.White)
+		gui.renderSlotItem(offX+6.0*scale*2.0, offY+3.0*scale*2.0, innerSlotSize, gui.OffhandSlot, atlas, scale)
 	} else {
 		totalW := slotSize * 9.0
 		rl.DrawRectangle(int32(x), int32(y), int32(totalW), int32(slotSize), rl.NewColor(45, 45, 45, 240))
@@ -852,6 +1008,13 @@ func (gui *InventoryGUI) renderHotbar(x, y, slotSize float32, atlas *voxel.Textu
 				rl.DrawRectangleLinesEx(rl.NewRectangle(sx-2*scale, y-2*scale, slotSize+4*scale, slotSize+4*scale), 3.0*scale, rl.RayWhite)
 			}
 		}
+
+		// Off-hand slot fallback
+		offX := x - slotSize - 8.0*scale
+		offY := y
+		rl.DrawRectangle(int32(offX), int32(offY), int32(slotSize), int32(slotSize), rl.NewColor(45, 45, 45, 240))
+		rl.DrawRectangleLinesEx(rl.NewRectangle(offX, offY, slotSize, slotSize), 2.0*scale, rl.NewColor(80, 80, 80, 255))
+		gui.renderSlotItem(offX+4.0*scale, offY+4.0*scale, slotSize-8.0*scale, gui.OffhandSlot, atlas, scale)
 	}
 
 	// Active block name popup
@@ -895,6 +1058,36 @@ func (gui *InventoryGUI) renderSlotItem(x, y, size float32, item ItemStack, atla
 		rl.DrawText(countStr, tx+1, ty+1, fontSize, rl.NewColor(30, 30, 30, 255))
 		// White text
 		rl.DrawText(countStr, tx, ty, fontSize, rl.RayWhite)
+	}
+
+	// 3. Draw Authentic Minecraft Durability Bar for Damaged Tools
+	if item.MaxDurability > 0 && item.Durability < item.MaxDurability && item.Durability >= 0 {
+		barW := size - 4.0*scale
+		barH := 2.0 * scale
+		barX := x + 2.0*scale
+		barY := y + size - 3.0*scale
+
+		// Background black track
+		rl.DrawRectangle(int32(barX), int32(barY), int32(barW), int32(barH), rl.Black)
+
+		// Remaining bar width
+		ratio := float32(item.Durability) / float32(item.MaxDurability)
+		fillW := barW * ratio
+		if fillW < 1.0 && ratio > 0 {
+			fillW = 1.0
+		}
+
+		// Minecraft durability colors: Green > 60%, Yellow > 25%, Red <= 25%
+		var barCol rl.Color
+		if ratio > 0.60 {
+			barCol = rl.NewColor(0, 230, 0, 255) // Vibrant Green
+		} else if ratio > 0.25 {
+			barCol = rl.NewColor(240, 210, 0, 255) // Amber Yellow
+		} else {
+			barCol = rl.NewColor(230, 30, 30, 255) // Warning Red
+		}
+
+		rl.DrawRectangle(int32(barX), int32(barY), int32(fillW), int32(barH), barCol)
 	}
 }
 
@@ -949,6 +1142,11 @@ func (gui *InventoryGUI) renderSurvivalInventoryGUI(cx, cy float32, p *mcplayer.
 		sy := winY + 142.0*s
 		gui.renderInteractiveSlot(sx, sy, slotSize, &gui.HotbarSlots[c], atlas, scale, false, false)
 	}
+
+	// Off-hand Slot in GUI (x: 77, y: 62)
+	offSlotX := winX + 77.0*s
+	offSlotY := winY + 62.0*s
+	gui.renderInteractiveSlot(offSlotX, offSlotY, slotSize, &gui.OffhandSlot, atlas, scale, false, false)
 
 	// Recipe Book Toggle Button
 	bookBtnX := winX + 104.0*s

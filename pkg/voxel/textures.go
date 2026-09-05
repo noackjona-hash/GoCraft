@@ -278,8 +278,75 @@ func stitchResourcePack(img *rl.Image, blockDir, itemDir string, tileSize int32)
 		"gunpowder.png":        {{14, 4}},
 		"bone.png":             {{15, 4}},
 		"arrow.png":            {{10, 5}},
-		"water_bucket.png":     {{11, 5}},
-		"bucket.png":           {{12, 5}},
+		"water_bucket.png":     {{12, 8}},
+		"bucket.png":           {{13, 8}},
+
+		// Row 5: Weapons & Tools
+		"bow.png":                     {{0, 5}},
+		"shield.png":                  {{1, 5}},
+		"empty_armor_slot_shield.png": {{1, 5}},
+		"flint_and_steel.png":         {{2, 5}},
+		"shears.png":                  {{3, 5}},
+		"fishing_rod.png":             {{4, 5}},
+		"compass_00.png":              {{5, 5}},
+		"compass.png":                 {{5, 5}},
+		"clock_00.png":                {{6, 5}},
+		"clock.png":                   {{6, 5}},
+		"flint.png":                   {{7, 5}},
+		"string.png":                  {{8, 5}},
+		"feather.png":                 {{9, 5}},
+
+		// Row 6: Materials & Drops
+		"gold_nugget.png":   {{5, 6}},
+		"iron_nugget.png":   {{6, 6}},
+		"redstone.png":      {{7, 6}},
+		"redstone_dust.png": {{7, 6}},
+		"lapis_lazuli.png":  {{8, 6}},
+		"emerald.png":       {{9, 6}},
+		"leather.png":       {{10, 6}},
+		"spider_eye.png":    {{11, 6}},
+		"ender_pearl.png":   {{12, 6}},
+		"slime_ball.png":    {{13, 6}},
+		"slimeball.png":     {{13, 6}},
+		"blaze_rod.png":     {{14, 6}},
+		"book.png":          {{15, 6}},
+
+		// Row 7: Food & Crops
+		"golden_apple.png":   {{0, 7}},
+		"carrot.png":         {{1, 7}},
+		"golden_carrot.png":  {{2, 7}},
+		"potato.png":         {{3, 7}},
+		"baked_potato.png":   {{4, 7}},
+		"mushroom_stew.png":  {{5, 7}},
+		"cookie.png":         {{6, 7}},
+		"chicken.png":        {{7, 7}},
+		"raw_chicken.png":    {{7, 7}},
+		"cooked_chicken.png": {{8, 7}},
+		"mutton.png":         {{9, 7}},
+		"raw_mutton.png":     {{9, 7}},
+		"cooked_mutton.png":  {{10, 7}},
+		"wheat.png":          {{11, 7}},
+		"wheat_seeds.png":    {{12, 7}},
+		"melon_slice.png":    {{13, 7}},
+		"sweet_berries.png":  {{14, 7}},
+
+		// Row 8: Gold Tools & Armor
+		"golden_pickaxe.png":     {{0, 8}},
+		"gold_pickaxe.png":       {{0, 8}},
+		"golden_axe.png":         {{1, 8}},
+		"gold_axe.png":           {{1, 8}},
+		"golden_shovel.png":      {{2, 8}},
+		"gold_shovel.png":        {{2, 8}},
+		"golden_sword.png":       {{3, 8}},
+		"gold_sword.png":         {{3, 8}},
+		"iron_helmet.png":        {{4, 8}},
+		"iron_chestplate.png":    {{5, 8}},
+		"iron_leggings.png":      {{6, 8}},
+		"iron_boots.png":         {{7, 8}},
+		"diamond_helmet.png":     {{8, 8}},
+		"diamond_chestplate.png": {{9, 8}},
+		"diamond_leggings.png":   {{10, 8}},
+		"diamond_boots.png":      {{11, 8}},
 	}
 
 	destroyStages := [10]string{
@@ -510,11 +577,14 @@ func generateProceduralBase(img *rl.Image) {
 	drawTool(img, 12, 3, rl.NewColor(130, 130, 130, 255), "sword")
 	drawTool(img, 13, 3, rl.NewColor(230, 230, 230, 255), "pickaxe")
 	drawTool(img, 14, 3, rl.NewColor(230, 230, 230, 255), "axe")
-	drawTool(img, 15, 3, rl.NewColor(95, 240, 250, 255), "pickaxe")
+	// Row 5 & 2 Cactus Textures
+	drawCactusSide(img, 15, 2)
+	drawCactusTop(img, 11, 5)
+	drawCactusBottom(img, 12, 5)
 
-	// Row 5 Items
-	drawWaterBucket(img, 11, 5)
-	drawBucket(img, 12, 5)
+	// Row 8 Buckets (Moved from Row 5 to avoid overwriting Cactus!)
+	drawWaterBucket(img, 12, 8)
+	drawBucket(img, 13, 8)
 
 	// Row 15: Authentic Steve Character Model & First-Person Arm
 	drawSteveShirt(img, 0, 15)
@@ -1028,6 +1098,52 @@ func drawWaterBucket(img *rl.Image, col, row int) {
 			}
 		}
 	}
+}
+
+func drawCactusSide(img *rl.Image, col, row int) {
+	cDark := rl.NewColor(15, 105, 25, 255)
+	cMid := rl.NewColor(25, 135, 35, 255)
+	cLight := rl.NewColor(45, 155, 55, 255)
+	cThorn := rl.NewColor(230, 230, 210, 255)
+	for y := 0; y < 16; y++ {
+		for x := 0; x < 16; x++ {
+			c := cMid
+			if x%4 == 0 {
+				c = cDark
+			} else if x%4 == 1 {
+				c = cLight
+			}
+			if (x%4 == 2) && (y%4 == 1) {
+				c = cThorn
+			}
+			setPixel(img, col, row, x, y, c)
+		}
+	}
+}
+
+func drawCactusTop(img *rl.Image, col, row int) {
+	cDark := rl.NewColor(15, 95, 20, 255)
+	cMid := rl.NewColor(30, 125, 35, 255)
+	cLight := rl.NewColor(50, 150, 55, 255)
+	cThorn := rl.NewColor(230, 230, 210, 255)
+	for y := 0; y < 16; y++ {
+		for x := 0; x < 16; x++ {
+			c := cMid
+			if x == 0 || x == 15 || y == 0 || y == 15 {
+				c = cDark
+			} else if x%4 == 0 || y%4 == 0 {
+				c = cLight
+			}
+			if (x == 4 || x == 11) && (y == 4 || y == 11) {
+				c = cThorn
+			}
+			setPixel(img, col, row, x, y, c)
+		}
+	}
+}
+
+func drawCactusBottom(img *rl.Image, col, row int) {
+	drawCactusTop(img, col, row)
 }
 
 func drawSteveHeadFront(img *rl.Image, col, row int) {

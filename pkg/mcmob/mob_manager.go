@@ -14,6 +14,7 @@ type MobManager struct {
 	MaxMobs      int
 	SpawnTimer   float32
 	ItemEntities []*ItemEntity
+	Arrows       []*Arrow
 
 	// Mob Textures
 	TexZombie   rl.Texture2D
@@ -30,6 +31,7 @@ func NewMobManager() *MobManager {
 		Mobs:         make([]*Mob, 0, 32),
 		MaxMobs:      24,
 		ItemEntities: make([]*ItemEntity, 0, 128),
+		Arrows:       make([]*Arrow, 0, 32),
 	}
 
 	mm.TexZombie = rl.LoadTexture("assets/textures/entity/zombie/zombie.png")
@@ -78,6 +80,8 @@ func (mm *MobManager) Update(
 	onDropLoot func(item voxel.BlockType, count int, pos rl.Vector3),
 	onExplode func(pos rl.Vector3, radius float32),
 	onPickupLoot func(item voxel.BlockType, count int) bool,
+	onArrowShoot func(),
+	onArrowHit func(),
 ) {
 	// 1. Natural Spawning
 	mm.SpawnTimer += dt
@@ -131,9 +135,19 @@ func (mm *MobManager) Update(
 				switch m.Type {
 				case MobZombie:
 					onDropLoot(voxel.ItemRottenFlesh, 1+rand.Intn(2), m.Pos)
+					if rand.Float32() < 0.20 {
+						onDropLoot(voxel.ItemIronIngot, 1, m.Pos)
+					} else if rand.Float32() < 0.25 {
+						onDropLoot(voxel.ItemCarrot, 1, m.Pos)
+					} else if rand.Float32() < 0.25 {
+						onDropLoot(voxel.ItemPotato, 1, m.Pos)
+					}
 				case MobSkeleton:
 					onDropLoot(voxel.ItemBone, 1+rand.Intn(2), m.Pos)
 					onDropLoot(voxel.ItemArrow, 1+rand.Intn(3), m.Pos)
+					if rand.Float32() < 0.15 {
+						onDropLoot(voxel.ItemBow, 1, m.Pos)
+					}
 				case MobCreeper:
 					if m.FuseTimer < 1.3 { // Only drop gunpowder if killed before exploding!
 						onDropLoot(voxel.ItemGunpowder, 1+rand.Intn(2), m.Pos)
@@ -142,9 +156,10 @@ func (mm *MobManager) Update(
 					onDropLoot(voxel.ItemRawPorkchop, 1+rand.Intn(2), m.Pos)
 				case MobCow:
 					onDropLoot(voxel.ItemRawBeef, 1+rand.Intn(2), m.Pos)
+					onDropLoot(voxel.ItemLeather, 1+rand.Intn(2), m.Pos)
 				case MobSheep:
 					onDropLoot(voxel.BlockWool, 1+rand.Intn(2), m.Pos)
-					onDropLoot(voxel.ItemRawBeef, 1, m.Pos)
+					onDropLoot(voxel.ItemRawMutton, 1+rand.Intn(2), m.Pos)
 				}
 			}
 			continue
@@ -157,7 +172,13 @@ func (mm *MobManager) Update(
 			continue
 		}
 
-		exploded := m.Update(dt, playerPos, playerHealth, world, sunHeight)
+		exploded, arrow := m.Update(dt, playerPos, playerHealth, world, sunHeight)
+		if arrow != nil {
+			mm.Arrows = append(mm.Arrows, arrow)
+			if onArrowShoot != nil {
+				onArrowShoot()
+			}
+		}
 		if exploded {
 			if onExplode != nil {
 				onExplode(m.Pos, 3.5)
@@ -193,6 +214,43 @@ func (mm *MobManager) Update(
 		activeItems = append(activeItems, item)
 	}
 	mm.ItemEntities = activeItems
+
+	// 4. Update Flying & Stuck Arrows
+	activeArrows := mm.Arrows[:0]
+	for _, arrow := range mm.Arrows {
+		// Player arrow hitting mobs
+		if !arrow.IsFromMob && !arrow.IsStuck {
+			for _, m := range mm.Mobs {
+				if m.IsDead {
+					continue
+				}
+				mobCenter := m.Pos
+				mobCenter.Y += m.Height * 0.5
+				if rl.Vector3Distance(arrow.Pos, mobCenter) < m.Width*0.75+0.35 {
+					m.ApplyDamage(arrow.Damage, arrow.Vel)
+					arrow.IsStuck = true
+					arrow.LifeTimer = 0.01 // Despawn
+					if onArrowHit != nil {
+						onArrowHit()
+					}
+					break
+				}
+			}
+		}
+
+		despawn := arrow.Update(dt, world, playerPos, playerHealth, onArrowHit)
+		if !despawn {
+			activeArrows = append(activeArrows, arrow)
+		}
+	}
+	mm.Arrows = activeArrows
+}
+
+// SpawnArrow spawns a new arrow projectile in the world
+func (mm *MobManager) SpawnArrow(pos, vel rl.Vector3, damage float32, isFromMob bool) *Arrow {
+	arrow := NewArrow(pos, vel, damage, isFromMob)
+	mm.Arrows = append(mm.Arrows, arrow)
+	return arrow
 }
 
 // RaycastMob checks if the player's crosshair hits any mob
@@ -237,10 +295,13 @@ func (mm *MobManager) RaycastMob(rayOrigin, rayDir rl.Vector3, maxDist float32) 
 	return nil, 0, false
 }
 
-// Render3D draws all living mobs
+// Render3D draws all living mobs and flying arrows
 func (mm *MobManager) Render3D() {
 	for _, m := range mm.Mobs {
 		m.Render3D(mm)
+	}
+	for _, arrow := range mm.Arrows {
+		arrow.Render3D()
 	}
 }
 

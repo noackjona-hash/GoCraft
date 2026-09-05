@@ -753,23 +753,30 @@ func (cm *ChunkManager) RebuildChunkMeshes(c *Chunk) {
 				westBlock := w.GetBlock(x-1, y, z)
 				eastBlock := w.GetBlock(x+1, y, z)
 
+				yCorner0 := y1
+				yCorner1 := y1
+				yCorner2 := y1
+				yCorner3 := y1
+
 				if isWaterBlock {
-					// Liquid surface depression: still and flowing water top is 0.88 high
-					if !IsWater(topBlock) {
-						y1 = y0 + 0.88
-					}
+					// Authentic Minecraft fluid levels & smooth corner height averaging
+					yCorner0 = y0 + w.GetWaterCornerHeight(x, y, z, 0)
+					yCorner1 = y0 + w.GetWaterCornerHeight(x, y, z, 1)
+					yCorner2 = y0 + w.GetWaterCornerHeight(x, y, z, 2)
+					yCorner3 = y0 + w.GetWaterCornerHeight(x, y, z, 3)
 				}
 
 				var topAir, bottomAir, northAir, southAir, westAir, eastAir bool
 
 				if isWaterBlock {
-					// Water faces only rendered if neighbor is not water
+					// Water faces only rendered against AIR or non-solid blocks
+					// (NEVER against solid blocks like sand, dirt, clay, stone - this eliminates 100% of Z-fighting!)
 					topAir = !IsWater(topBlock)
-					bottomAir = y > 0 && !IsWater(bottomBlock)
-					northAir = !IsWater(northBlock)
-					southAir = !IsWater(southBlock)
-					westAir = !IsWater(westBlock)
-					eastAir = !IsWater(eastBlock)
+					bottomAir = y > 0 && !IsWater(bottomBlock) && !w.IsSolid(x, y-1, z)
+					northAir = !IsWater(northBlock) && !w.IsSolid(x, y, z-1)
+					southAir = !IsWater(southBlock) && !w.IsSolid(x, y, z+1)
+					westAir = !IsWater(westBlock) && !w.IsSolid(x-1, y, z)
+					eastAir = !IsWater(eastBlock) && !w.IsSolid(x+1, y, z)
 				} else if bType == BlockGlass {
 					topAir = topBlock != BlockGlass && (y == WorldHeight-1 || BlockRegistry[topBlock].IsTransparent)
 					bottomAir = bottomBlock != BlockGlass && (y > 0 && BlockRegistry[bottomBlock].IsTransparent)
@@ -814,10 +821,10 @@ func (cm *ChunkManager) RebuildChunkMeshes(c *Chunk) {
 					c2 := calculateMinecraftVertexColor(skyLight, torchLight, ao2, faceMult, blockAlpha)
 					c3 := calculateMinecraftVertexColor(skyLight, torchLight, ao3, faceMult, blockAlpha)
 
-					p0 := rl.Vector3{X: x0, Y: y1, Z: z1}
-					p1 := rl.Vector3{X: x1, Y: y1, Z: z1}
-					p2 := rl.Vector3{X: x1, Y: y1, Z: z0}
-					p3 := rl.Vector3{X: x0, Y: y1, Z: z0}
+					p0 := rl.Vector3{X: x0, Y: yCorner0, Z: z1}
+					p1 := rl.Vector3{X: x1, Y: yCorner1, Z: z1}
+					p2 := rl.Vector3{X: x1, Y: yCorner2, Z: z0}
+					p3 := rl.Vector3{X: x0, Y: yCorner3, Z: z0}
 					norm := rl.Vector3{X: 0, Y: 1, Z: 0}
 
 					mb.AddQuad(p0, p1, p2, p3, norm, uMin, vMin, uMax, vMax, c0, c1, c2, c3, ao1+ao3 > ao0+ao2)
@@ -866,8 +873,8 @@ func (cm *ChunkManager) RebuildChunkMeshes(c *Chunk) {
 
 					p0 := rl.Vector3{X: x1, Y: y0, Z: z0}
 					p1 := rl.Vector3{X: x0, Y: y0, Z: z0}
-					p2 := rl.Vector3{X: x0, Y: y1, Z: z0}
-					p3 := rl.Vector3{X: x1, Y: y1, Z: z0}
+					p2 := rl.Vector3{X: x0, Y: yCorner3, Z: z0}
+					p3 := rl.Vector3{X: x1, Y: yCorner2, Z: z0}
 					norm := rl.Vector3{X: 0, Y: 0, Z: -1}
 
 					mb.AddQuad(p0, p1, p2, p3, norm, uMin, vMin, uMax, vMax, c0, c1, c2, c3, ao1+ao3 > ao0+ao2)
@@ -891,8 +898,8 @@ func (cm *ChunkManager) RebuildChunkMeshes(c *Chunk) {
 
 					p0 := rl.Vector3{X: x0, Y: y0, Z: z1}
 					p1 := rl.Vector3{X: x1, Y: y0, Z: z1}
-					p2 := rl.Vector3{X: x1, Y: y1, Z: z1}
-					p3 := rl.Vector3{X: x0, Y: y1, Z: z1}
+					p2 := rl.Vector3{X: x1, Y: yCorner1, Z: z1}
+					p3 := rl.Vector3{X: x0, Y: yCorner0, Z: z1}
 					norm := rl.Vector3{X: 0, Y: 0, Z: 1}
 
 					mb.AddQuad(p0, p1, p2, p3, norm, uMin, vMin, uMax, vMax, c0, c1, c2, c3, ao1+ao3 > ao0+ao2)
@@ -916,8 +923,8 @@ func (cm *ChunkManager) RebuildChunkMeshes(c *Chunk) {
 
 					p0 := rl.Vector3{X: x0, Y: y0, Z: z0}
 					p1 := rl.Vector3{X: x0, Y: y0, Z: z1}
-					p2 := rl.Vector3{X: x0, Y: y1, Z: z1}
-					p3 := rl.Vector3{X: x0, Y: y1, Z: z0}
+					p2 := rl.Vector3{X: x0, Y: yCorner0, Z: z1}
+					p3 := rl.Vector3{X: x0, Y: yCorner3, Z: z0}
 					norm := rl.Vector3{X: -1, Y: 0, Z: 0}
 
 					mb.AddQuad(p0, p1, p2, p3, norm, uMin, vMin, uMax, vMax, c0, c1, c2, c3, ao1+ao3 > ao0+ao2)
@@ -941,8 +948,8 @@ func (cm *ChunkManager) RebuildChunkMeshes(c *Chunk) {
 
 					p0 := rl.Vector3{X: x1, Y: y0, Z: z1}
 					p1 := rl.Vector3{X: x1, Y: y0, Z: z0}
-					p2 := rl.Vector3{X: x1, Y: y1, Z: z0}
-					p3 := rl.Vector3{X: x1, Y: y1, Z: z1}
+					p2 := rl.Vector3{X: x1, Y: yCorner2, Z: z0}
+					p3 := rl.Vector3{X: x1, Y: yCorner1, Z: z1}
 					norm := rl.Vector3{X: 1, Y: 0, Z: 0}
 
 					mb.AddQuad(p0, p1, p2, p3, norm, uMin, vMin, uMax, vMax, c0, c1, c2, c3, ao1+ao3 > ao0+ao2)

@@ -228,7 +228,6 @@ func main() {
 
 	// Background simulation timers for high FPS stability
 	randomTickTimer := float32(0)
-	waterSpreadTimer := float32(0)
 	renderDistToastTimer := float32(0)
 	renderDistToastMsg := ""
 	wasInWater := false
@@ -358,6 +357,16 @@ func main() {
 			player.TogglePerspective()
 		}
 
+		// 'F' Key: Swap Main Hand and Off-hand
+		if rl.IsKeyPressed(rl.KeyF) && !isMenuOpen && !player.IsDead {
+			gui.SwapOffhand()
+		}
+
+		// 'M' Key: Toggle Minimap Radar
+		if rl.IsKeyPressed(rl.KeyM) && !isMenuOpen && !player.IsDead {
+			gui.Minimap.Toggle()
+		}
+
 		// Hotbar Slot Selection (1-9)
 		if !isMenuOpen {
 			for key := rl.KeyOne; key <= rl.KeyNine; key++ {
@@ -385,6 +394,10 @@ func main() {
 		gui.UpdateFurnace(dt)
 
 		// Update 3D Mobs AI, Spawning & Combat
+		isShieldBlocking := rl.IsMouseButtonDown(rl.MouseButtonRight) && !isMenuOpen &&
+			(gui.GetActiveBlock() == voxel.ItemShield || gui.GetOffhandBlock() == voxel.ItemShield)
+		prevHealth := player.Health
+
 		mobManager.Update(
 			dt,
 			player.Pos,
@@ -419,7 +432,7 @@ func main() {
 				}
 				// Damage player if close to Creeper blast
 				pDist := rl.Vector3Distance(player.Pos, pos)
-				if pDist < 6.0 {
+				if pDist < 6.0 && !isShieldBlocking {
 					player.Health -= (6.0 - pDist) * 3.5
 				}
 			},
@@ -430,7 +443,21 @@ func main() {
 				}
 				return added
 			},
+			func() {
+				audioEngine.TriggerBowShoot()
+			},
+			func() {
+				audioEngine.TriggerArrowHit()
+			},
 		)
+
+		if isShieldBlocking && player.Health < prevHealth {
+			player.Health = prevHealth // Shield absorbed attack!
+			audioEngine.TriggerBlockBreak()
+			if gui.GetActiveBlock() == voxel.ItemShield {
+				gui.DamageActiveTool(1)
+			}
+		}
 
 		// --- 3. DDA VOXEL RAYCAST & MOB COMBAT ---
 		cosY := float32(math.Cos(float64(player.Yaw)))
@@ -448,39 +475,73 @@ func main() {
 			if dmg <= 0 {
 				dmg = 1.0
 			}
+
+			// Critical Strike check (jump-crit while falling!)
+			isCrit := player.IsCriticalStrike()
+			if isCrit {
+				dmg *= 1.5
+				for cp := 0; cp < 8; cp++ {
+					player.SpawnBlockBreakParticles(hitMob.Pos, voxel.BlockGoldOre)
+				}
+			}
+
 			hitMob.ApplyDamage(dmg, lookDir)
 			audioEngine.TriggerBlockBreak()
 			player.SpawnBlockBreakParticles(hitMob.Pos, voxel.BlockRedstoneOre) // Red damage spark
+
+			// Tool / Weapon durability decrement on attack
+			toolBroke := gui.DamageActiveTool(1)
+			if toolBroke {
+				audioEngine.TriggerToolBreak()
+				player.SpawnBlockBreakParticles(player.RLCamera.Position, activeItem)
+			}
 		}
 
 		// Food & Eating Mechanics (Holding Right-Click)
 		heldItem := gui.GetActiveBlock()
 		heldDef := voxel.BlockRegistry[heldItem]
-		if heldDef.IsFood && rl.IsMouseButtonDown(rl.MouseButtonRight) && !isMenuOpen && (player.Hunger < 20 || player.Health < 20) {
+		offItem := gui.GetOffhandBlock()
+		offDef := voxel.BlockRegistry[offItem]
+
+		isEatingMain := heldDef.IsFood && rl.IsMouseButtonDown(rl.MouseButtonRight) && !isMenuOpen && (player.Hunger < 20 || player.Health < 20)
+		isEatingOff := !heldDef.IsFood && offDef.IsFood && rl.IsMouseButtonDown(rl.MouseButtonRight) && !isMenuOpen && (player.Hunger < 20 || player.Health < 20)
+
+		if isEatingMain || isEatingOff {
 			player.EatingTimer += dt
 			miningCrunchTimer += dt
+			eatingItem := heldItem
+			foodPoints := heldDef.FoodPoints
+			if isEatingOff {
+				eatingItem = offItem
+				foodPoints = offDef.FoodPoints
+			}
+
 			if miningCrunchTimer >= 0.22 {
 				audioEngine.TriggerBlockBreak()
 				eatPos := rl.Vector3Add(player.RLCamera.Position, rl.Vector3Scale(lookDir, 0.4))
 				eatPos.Y -= 0.2 // Slightly lower for the mouth
-				player.SpawnBlockBreakParticles(eatPos, heldItem) // eating particles!
+				player.SpawnBlockBreakParticles(eatPos, eatingItem) // eating particles!
 				miningCrunchTimer = 0
 			}
 			if player.EatingTimer >= 1.4 {
-				player.Hunger += heldDef.FoodPoints
+				player.Hunger += foodPoints
 				if player.Hunger > 20 {
 					player.Hunger = 20
 				}
-				player.Health += heldDef.FoodPoints * 0.4
+				player.Health += foodPoints * 0.4
 				if player.Health > 20 {
 					player.Health = 20
 				}
-				gui.ConsumeActiveItem()
+				if isEatingMain {
+					gui.ConsumeActiveItem()
+				} else {
+					gui.ConsumeOffhandItem()
+				}
 				player.EatingTimer = 0
 				audioEngine.TriggerBlockBreak()
 				eatPos := rl.Vector3Add(player.RLCamera.Position, rl.Vector3Scale(lookDir, 0.4))
 				eatPos.Y -= 0.2
-				player.SpawnBlockBreakParticles(eatPos, heldItem)
+				player.SpawnBlockBreakParticles(eatPos, eatingItem)
 			}
 		} else if player.EatingTimer > 0 && !rl.IsMouseButtonDown(rl.MouseButtonRight) {
 			player.EatingTimer = 0
@@ -501,7 +562,6 @@ func main() {
 			}
 
 			brokenType := world.GetBlock(bx, by, bz)
-			bDef := voxel.BlockRegistry[brokenType]
 
 			if brokenType != voxel.BlockBedrock && brokenType != voxel.BlockAir {
 				player.TriggerSwing()
@@ -515,38 +575,11 @@ func main() {
 						audioEngine.TriggerBlockBreak()
 					}
 				} else {
-					// Survival Mode: Break progress based on block hardness & tool efficiency
-					hardness := bDef.Hardness
-					if hardness <= 0 {
-						hardness = 1.0
-					}
-
-					// Apply Tool Mining Speed Bonus!
+					// Survival Mode: Break progress based on authentic Minecraft hardness & tool tier rules
 					activeItem := gui.GetActiveBlock()
-					activeDef := voxel.BlockRegistry[activeItem]
-					if activeDef.IsTool {
-						isPickaxeBlock := (brokenType == voxel.BlockStone || brokenType == voxel.BlockCobblestone ||
-							brokenType == voxel.BlockCoalOre || brokenType == voxel.BlockIronOre ||
-							brokenType == voxel.BlockGoldOre || brokenType == voxel.BlockDiamondOre ||
-							brokenType == voxel.BlockRedstoneOre || brokenType == voxel.BlockEmeraldOre ||
-							brokenType == voxel.BlockLapisOre || brokenType == voxel.BlockFurnace ||
-							brokenType == voxel.BlockBricks || brokenType == voxel.BlockSandstone ||
-							brokenType == voxel.BlockMossyCobblestone)
+					miningDuration, canHarvest := voxel.GetMiningSpeedAndHarvest(brokenType, activeItem)
 
-						isAxeBlock := (brokenType == voxel.BlockOakLog || brokenType == voxel.BlockOakPlanks ||
-							brokenType == voxel.BlockCraftingTable || brokenType == voxel.BlockBookshelf)
-
-						isShovelBlock := (brokenType == voxel.BlockDirt || brokenType == voxel.BlockGrass ||
-							brokenType == voxel.BlockSand)
-
-						if (activeDef.ToolType == "pickaxe" && isPickaxeBlock) ||
-							(activeDef.ToolType == "axe" && isAxeBlock) ||
-							(activeDef.ToolType == "shovel" && isShovelBlock) {
-							hardness /= activeDef.MiningEfficiency
-						}
-					}
-
-					miningProgress += dt / hardness
+					miningProgress += dt / miningDuration
 					miningCrunchTimer += dt
 					if miningCrunchTimer >= 0.22 {
 						audioEngine.TriggerBlockBreak()
@@ -555,20 +588,30 @@ func main() {
 
 					if miningProgress >= 1.0 {
 						player.SpawnBlockBreakParticles(rayResult.BlockPos, brokenType)
-						dropItem := voxel.GetBlockDrop(brokenType)
-						if dropItem != voxel.BlockAir {
-							// Spawn item in the world with a small random velocity popup
-							itemPos := rl.Vector3{
-								X: float32(bx) + 0.5,
-								Y: float32(by) + 0.5,
-								Z: float32(bz) + 0.5,
+
+						// Only drop item if tool tier is sufficient!
+						if canHarvest {
+							dropItem := voxel.GetBlockDrop(brokenType)
+							if dropItem != voxel.BlockAir {
+								itemPos := rl.Vector3{
+									X: float32(bx) + 0.5,
+									Y: float32(by) + 0.5,
+									Z: float32(bz) + 0.5,
+								}
+								itemVel := rl.Vector3{
+									X: (rand.Float32() - 0.5) * 3.0,
+									Y: 3.0 + rand.Float32()*2.0,
+									Z: (rand.Float32() - 0.5) * 3.0,
+								}
+								mobManager.SpawnItem(dropItem, 1, itemPos, itemVel)
 							}
-							itemVel := rl.Vector3{
-								X: (rand.Float32() - 0.5) * 3.0,
-								Y: 3.0 + rand.Float32()*2.0,
-								Z: (rand.Float32() - 0.5) * 3.0,
-							}
-							mobManager.SpawnItem(dropItem, 1, itemPos, itemVel)
+						}
+
+						// Tool Durability: decrement active tool durability by 1
+						toolBroke := gui.DamageActiveTool(1)
+						if toolBroke {
+							audioEngine.TriggerToolBreak()
+							player.SpawnBlockBreakParticles(player.RLCamera.Position, activeItem)
 						}
 
 						// TNT Explosion!
@@ -594,16 +637,12 @@ func main() {
 						} else {
 							world.SetBlock(bx, by, bz, voxel.BlockAir)
 							chunkManager.MarkBlockDirty(bx, bz)
+							world.NotifyNeighbors(bx, by, bz, chunkManager)
 							audioEngine.TriggerBlockBreak()
 
 							// Tree Leaf Decay when log is broken!
 							if voxel.IsLog(brokenType) {
 								world.QueueLeafDecay(bx, by, bz)
-							}
-
-							// Sand Gravity: drop sand if block beneath was mined!
-							if by+1 < voxel.WorldHeight && world.GetBlock(bx, by+1, bz) == voxel.BlockSand {
-								world.QueueSandFall(bx, by+1, bz)
 							}
 						}
 						miningProgress = 0
@@ -656,6 +695,55 @@ func main() {
 							gui.SetActiveSlotItem(voxel.ItemBucket, 1)
 						}
 					}
+				} else if heldBlock == voxel.ItemBow {
+					// 2. Bow Archery
+					hasArrow := player.Mode == mcplayer.GameModeCreative || gui.RemoveItem(voxel.ItemArrow, 1) > 0
+					if hasArrow {
+						arrowOrigin := player.RLCamera.Position
+						arrowOrigin = rl.Vector3Add(arrowOrigin, rl.Vector3Scale(lookDir, 0.4))
+						arrowVel := rl.Vector3Scale(lookDir, 28.0)
+						mobManager.SpawnArrow(arrowOrigin, arrowVel, 6.0, false)
+						audioEngine.TriggerBowShoot()
+						gui.DamageActiveTool(1)
+					}
+				} else if heldBlock == voxel.ItemEnderPearl {
+					// 3. Ender Pearl Teleportation
+					targetPos := rl.Vector3Add(player.RLCamera.Position, rl.Vector3Scale(lookDir, 24.0))
+					if rayResult.Hit {
+						targetPos = rayResult.PlacePos
+					}
+					targetPos.Y += 0.1
+					player.Pos = targetPos
+					player.Health -= 4.0 // Teleport damage
+					audioEngine.TriggerTNTExplosion()
+					player.SpawnBlockBreakParticles(player.Pos, voxel.BlockObsidian)
+					if player.Mode == mcplayer.GameModeSurvival {
+						gui.ConsumeActiveItem()
+					}
+				} else if heldBlock == voxel.ItemFlintAndSteel && rayResult.Hit && world.GetBlock(int(rayResult.BlockPos.X), int(rayResult.BlockPos.Y), int(rayResult.BlockPos.Z)) == voxel.BlockTNT {
+					// 4. Flint and Steel TNT ignition
+					bx := int(rayResult.BlockPos.X)
+					by := int(rayResult.BlockPos.Y)
+					bz := int(rayResult.BlockPos.Z)
+					world.SetBlock(bx, by, bz, voxel.BlockAir)
+					chunkManager.MarkBlockDirty(bx, bz)
+					audioEngine.TriggerTNTExplosion()
+					gui.DamageActiveTool(1)
+					for ex := -3; ex <= 3; ex++ {
+						for ey := -3; ey <= 3; ey++ {
+							for ez := -3; ez <= 3; ez++ {
+								if ex*ex+ey*ey+ez*ez <= 9 {
+									tx, ty, tz := bx+ex, by+ey, bz+ez
+									tBlock := world.GetBlock(tx, ty, tz)
+									if tBlock != voxel.BlockBedrock && tBlock != voxel.BlockAir {
+										player.SpawnBlockBreakParticles(rl.Vector3{X: float32(tx), Y: float32(ty), Z: float32(tz)}, tBlock)
+										world.SetBlock(tx, ty, tz, voxel.BlockAir)
+										chunkManager.MarkBlockDirty(tx, tz)
+									}
+								}
+							}
+						}
+					}
 				} else if rayResult.Hit {
 					bx := int(rayResult.BlockPos.X)
 					by := int(rayResult.BlockPos.Y)
@@ -677,6 +765,7 @@ func main() {
 						py := int(rayResult.PlacePos.Y)
 						pz := int(rayResult.PlacePos.Z)
 
+						placed := false
 						if heldBlock != voxel.BlockAir && !bDef.IsTool && heldBlock != voxel.ItemStick && heldBlock != voxel.ItemCoal && heldBlock != voxel.ItemDiamond && heldBlock != voxel.ItemIronIngot && heldBlock != voxel.ItemGoldIngot {
 							playerBlockX := int(math.Floor(float64(player.Pos.X)))
 							playerBlockY1 := int(math.Floor(float64(player.Pos.Y)))
@@ -692,14 +781,41 @@ func main() {
 
 								world.SetBlock(px, py, pz, blockToPlace)
 								chunkManager.MarkBlockDirty(px, pz)
+								world.NotifyNeighbors(px, py, pz, chunkManager)
 								audioEngine.TriggerBlockPlace()
-
-								if heldBlock == voxel.BlockSand {
-									world.QueueSandFall(px, py, pz)
-								}
 
 								if player.Mode == mcplayer.GameModeSurvival {
 									gui.ConsumeActiveItem()
+								}
+								placed = true
+							}
+						}
+
+						// If main hand didn't place a block, fallback to Off-hand (e.g. Torch in offhand while holding Pickaxe!)
+						if !placed {
+							offBlock := gui.GetOffhandBlock()
+							offDef := voxel.BlockRegistry[offBlock]
+							if offBlock != voxel.BlockAir && !offDef.IsTool && offBlock != voxel.ItemStick && offBlock != voxel.ItemCoal && offBlock != voxel.ItemDiamond && offBlock != voxel.ItemIronIngot && offBlock != voxel.ItemGoldIngot {
+								playerBlockX := int(math.Floor(float64(player.Pos.X)))
+								playerBlockY1 := int(math.Floor(float64(player.Pos.Y)))
+								playerBlockY2 := int(math.Floor(float64(player.Pos.Y + 1.0)))
+								playerBlockZ := int(math.Floor(float64(player.Pos.Z)))
+
+								overlapPlayer := (px == playerBlockX && pz == playerBlockZ && (py == playerBlockY1 || py == playerBlockY2))
+								if !overlapPlayer {
+									blockToPlace := offBlock
+									if voxel.IsLog(offBlock) {
+										blockToPlace = voxel.GetRotatedLogBlock(offBlock, rayResult.HitNormal)
+									}
+
+									world.SetBlock(px, py, pz, blockToPlace)
+									chunkManager.MarkBlockDirty(px, pz)
+									world.NotifyNeighbors(px, py, pz, chunkManager)
+									audioEngine.TriggerBlockPlace()
+
+									if player.Mode == mcplayer.GameModeSurvival {
+										gui.ConsumeOffhandItem()
+									}
 								}
 							}
 						}
@@ -752,27 +868,13 @@ func main() {
 		}
 		wasInWater = player.IsSwimming
 
-		// Throttled Water Flow & Falling Sand Simulation around player (4x per sec)
-		waterSpreadTimer += dt
-		if waterSpreadTimer >= 0.25 {
-			waterSpreadTimer = 0
-			pcx := int(math.Floor(float64(player.Pos.X)))
-			pcy := int(math.Floor(float64(player.Pos.Y)))
-			pcz := int(math.Floor(float64(player.Pos.Z)))
-			for ox := -4; ox <= 4; ox++ {
-				for oz := -4; oz <= 4; oz++ {
-					for oy := -3; oy <= 3; oy++ {
-						tx := pcx + ox
-						ty := pcy + oy
-						tz := pcz + oz
-						b := world.GetBlock(tx, ty, tz)
-						if voxel.IsWater(b) {
-							world.SpreadWater(tx, ty, tz, chunkManager)
-						} else if b == voxel.BlockSand {
-							world.QueueSandFall(tx, ty, tz)
-						}
-					}
-				}
+		// Minecraft Block Updates: Stepping onto unsupported sand triggers physics update
+		if player.IsGrounded {
+			underFootX := int(math.Floor(float64(player.Pos.X)))
+			underFootY := int(math.Floor(float64(player.Pos.Y - 0.15)))
+			underFootZ := int(math.Floor(float64(player.Pos.Z)))
+			if world.GetBlock(underFootX, underFootY, underFootZ) == voxel.BlockSand {
+				world.NotifyNeighbors(underFootX, underFootY, underFootZ, chunkManager)
 			}
 		}
 
@@ -791,8 +893,9 @@ func main() {
 		// Update GPU Chunk Shader Fog and Minecraft Dynamic Lighting
 		totalGameTime += dt
 		heldBlock := gui.GetActiveBlock()
+		offhandBlock := gui.GetOffhandBlock()
 		heldTorchLevel := float32(0)
-		if heldBlock == voxel.BlockTorch {
+		if heldBlock == voxel.BlockTorch || offhandBlock == voxel.BlockTorch {
 			heldTorchLevel = 1.0
 		}
 		chunkManager.UpdateFogAndSky(skyCol, player.IsSubmerged, player.RLCamera.Position, sunAngle, sunHeight, totalGameTime, player.Pos, heldTorchLevel)
@@ -901,8 +1004,8 @@ func main() {
 		// 7. 3D Steve Character Model (Rendered in 3rd Person views)
 		player.Render3DSteveModel()
 
-		// 8. First-Person Animated Right Hand / Textured 3D Held Block
-		player.RenderHandAndHeldBlock(gui.GetActiveBlock(), atlas)
+		// 8. First-Person Animated Hands (Main hand & Off-hand) / Held Blocks
+		player.RenderHandAndHeldBlock(gui.GetActiveBlock(), gui.GetOffhandBlock(), atlas)
 
 		rl.EndMode3D()
 
@@ -916,12 +1019,17 @@ func main() {
 
 		gui.Render(player, world, atlas)
 
+		// Minimap HUD Overlay (Top-Right)
+		if !isMenuOpen {
+			gui.Minimap.Render(world, player.Pos, player.Yaw, mobManager.Mobs, screenWidth, screenHeight)
+		}
+
 		// Top Controls & Mode Tooltip (Centered)
 		modeTag := "[SURVIVAL]"
 		if player.Mode == mcplayer.GameModeCreative {
 			modeTag = "[CREATIVE]"
 		}
-		controlsText := fmt.Sprintf("%s  |  WASD: Move  |  SPACE: Jump  |  L-CLICK: Mine  |  R-CLICK: Place  |  R: Rotate  |  F4: Dist (%d)  |  F5: Save", modeTag, chunkManager.RenderRadius)
+		controlsText := fmt.Sprintf("%s  |  WASD: Move  |  F: Off-hand  |  M: Minimap  |  L-CLICK: Mine  |  R-CLICK: Place/Eat  |  R: Rotate", modeTag)
 		cLen := rl.MeasureText(controlsText, 12)
 		rl.DrawRectangleRounded(rl.NewRectangle(float32(screenWidth)*0.5-float32(cLen)*0.5-12, 10, float32(cLen)+24, 26), 0.3, 4, rl.NewColor(15, 20, 30, 210))
 		rl.DrawText(controlsText, int32(screenWidth)/2-cLen/2, 16, 12, rl.NewColor(240, 245, 255, 255))

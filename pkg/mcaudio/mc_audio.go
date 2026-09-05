@@ -20,6 +20,9 @@ type MCAudioEngine struct {
 	StepTimer  float32
 	TNTTimer   float32
 	SplashTimer float32
+	ToolBreakTimer float32
+	BowTimer       float32
+	ArrowHitTimer  float32
 
 	// Underwater Audio
 	IsUnderwater    bool
@@ -91,6 +94,21 @@ func (ae *MCAudioEngine) TriggerWaterPaddle() {
 	ae.SplashTimer = 0.14
 }
 
+// TriggerToolBreak plays sharp tool snapping sound
+func (ae *MCAudioEngine) TriggerToolBreak() {
+	ae.ToolBreakTimer = 0.35
+}
+
+// TriggerBowShoot plays crisp bow twang
+func (ae *MCAudioEngine) TriggerBowShoot() {
+	ae.BowTimer = 0.18
+}
+
+// TriggerArrowHit plays arrow impact sound
+func (ae *MCAudioEngine) TriggerArrowHit() {
+	ae.ArrowHitTimer = 0.15
+}
+
 // Update advances timers and ambient music
 func (ae *MCAudioEngine) Update(dt float32) {
 	if ae.BreakTimer > 0 {
@@ -107,6 +125,15 @@ func (ae *MCAudioEngine) Update(dt float32) {
 	}
 	if ae.SplashTimer > 0 {
 		ae.SplashTimer -= dt
+	}
+	if ae.ToolBreakTimer > 0 {
+		ae.ToolBreakTimer -= dt
+	}
+	if ae.BowTimer > 0 {
+		ae.BowTimer -= dt
+	}
+	if ae.ArrowHitTimer > 0 {
+		ae.ArrowHitTimer -= dt
 	}
 
 	if ae.IsUnderwater {
@@ -204,6 +231,30 @@ func (ae *MCAudioEngine) UpdateAudioStream() {
 			splashNoise := (rand.Float64()*2.0 - 1.0) * progress * 0.38
 			splashTone := math.Sin(float64(i)*260.0*progress*dtSample*twoPi) * progress * 0.22
 			totalOut += splashNoise + splashTone
+		}
+
+		// 6. Tool Break Snap & Shatter
+		if ae.ToolBreakTimer > 0 {
+			progress := float64(ae.ToolBreakTimer / 0.35)
+			snapNoise := (rand.Float64()*2.0 - 1.0) * progress * 0.45
+			snapTone := math.Sin(float64(i)*480.0*progress*dtSample*twoPi) * progress * 0.40
+			totalOut += snapNoise + snapTone
+		}
+
+		// 7. Bow Twang
+		if ae.BowTimer > 0 {
+			progress := float64(ae.BowTimer / 0.18)
+			fBow := 320.0 + (1.0-progress)*180.0
+			twang := math.Sin(float64(i)*fBow*dtSample*twoPi) * progress * 0.35
+			totalOut += twang
+		}
+
+		// 8. Arrow Impact (thwack)
+		if ae.ArrowHitTimer > 0 {
+			progress := float64(ae.ArrowHitTimer / 0.15)
+			thwack := (rand.Float64()*2.0 - 1.0) * progress * 0.40
+			thwackTone := math.Sin(float64(i)*210.0*dtSample*twoPi) * progress * 0.25
+			totalOut += thwack + thwackTone
 		}
 
 		// 6. Peaceful Ambient Piano Chords

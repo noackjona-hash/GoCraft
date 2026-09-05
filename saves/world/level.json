@@ -1,32 +1,32 @@
 {
   "version": 1,
   "player": {
-    "x": 2.2187028,
-    "y": 18,
-    "z": -8.727328,
-    "yaw": -4.205621,
-    "pitch": -0.30827668,
-    "health": 17,
-    "hunger": 17.155579,
+    "x": 41.871094,
+    "y": 20.129332,
+    "z": 82.77193,
+    "yaw": -1.870417,
+    "pitch": -0.15893936,
+    "health": 20,
+    "hunger": 17.461052,
     "oxygen": 10,
     "level": 30,
     "exp_progress": 0.65,
     "mode": 0
   },
   "inventory": {
-    "selected_slot": 2,
+    "selected_slot": 7,
     "hotbar": [
       {
-        "type": 82,
+        "type": 70,
         "count": 1
       },
       {
-        "type": 22,
-        "count": 1
+        "type": 7,
+        "count": 16
       },
       {
-        "type": 0,
-        "count": 0
+        "type": 23,
+        "count": 12
       },
       {
         "type": 6,
@@ -34,105 +34,105 @@
       },
       {
         "type": 55,
-        "count": 6
+        "count": 8
+      },
+      {
+        "type": 50,
+        "count": 2
+      },
+      {
+        "type": 51,
+        "count": 1
       },
       {
         "type": 2,
-        "count": 10
+        "count": 1
       },
       {
-        "type": 12,
-        "count": 4
-      },
-      {
-        "type": 59,
-        "count": 4
-      },
-      {
-        "type": 17,
+        "type": 122,
         "count": 2
       }
     ],
     "main": [
       {
-        "type": 4,
-        "count": 33
-      },
-      {
-        "type": 0,
-        "count": 0
-      },
-      {
-        "type": 0,
-        "count": 0
-      },
-      {
-        "type": 0,
-        "count": 0
-      },
-      {
-        "type": 0,
-        "count": 0
-      },
-      {
-        "type": 0,
-        "count": 0
-      },
-      {
-        "type": 0,
-        "count": 0
-      },
-      {
-        "type": 0,
-        "count": 0
-      },
-      {
-        "type": 0,
-        "count": 0
-      },
-      {
-        "type": 0,
-        "count": 0
-      },
-      {
-        "type": 0,
-        "count": 0
-      },
-      {
-        "type": 0,
-        "count": 0
-      },
-      {
-        "type": 0,
-        "count": 0
-      },
-      {
-        "type": 0,
-        "count": 0
-      },
-      {
-        "type": 0,
-        "count": 0
-      },
-      {
-        "type": 0,
-        "count": 0
-      },
-      {
-        "type": 0,
-        "count": 0
-      },
-      {
-        "type": 0,
-        "count": 0
-      },
-      {
-        "type": 70,
+        "type": 41,
         "count": 1
       },
       {
-        "type": 7,
-        "count": 12
+        "type": 12,
+        "count": 3
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
+      },
+      {
+        "type": 0,
+        "count": 0
       },
       {
         "type": 0,
@@ -164,80 +164,7 @@
       }
     ]
   },
-  "time_of_day": 0.97198,
+  "time_of_day": 0.4787683,
   "day_count": 0,
-  "torches": [
-    {
-      "x": 7,
-      "y": 18,
-      "z": -10,
-      "light_level": 14
-    },
-    {
-      "x": -1,
-      "y": 18,
-      "z": -12,
-      "light_level": 14
-    },
-    {
-      "x": 18,
-      "y": 18,
-      "z": 1,
-      "light_level": 14
-    },
-    {
-      "x": 24,
-      "y": 21,
-      "z": -8,
-      "light_level": 14
-    },
-    {
-      "x": 7,
-      "y": 18,
-      "z": -5,
-      "light_level": 14
-    },
-    {
-      "x": 8,
-      "y": 18,
-      "z": -13,
-      "light_level": 14
-    },
-    {
-      "x": -4,
-      "y": 18,
-      "z": -9,
-      "light_level": 14
-    },
-    {
-      "x": -3,
-      "y": 19,
-      "z": -1,
-      "light_level": 14
-    },
-    {
-      "x": 6,
-      "y": 20,
-      "z": 2,
-      "light_level": 14
-    },
-    {
-      "x": 13,
-      "y": 19,
-      "z": -1,
-      "light_level": 14
-    },
-    {
-      "x": 21,
-      "y": 19,
-      "z": -3,
-      "light_level": 14
-    },
-    {
-      "x": 5,
-      "y": 18,
-      "z": -8,
-      "light_level": 14
-    }
-  ]
+  "torches": null
 }

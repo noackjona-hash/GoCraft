@@ -4,8 +4,10 @@ import "gocraft/pkg/voxel"
 
 // ItemStack represents a stack of items in an inventory slot
 type ItemStack struct {
-	Type  voxel.BlockType
-	Count int
+	Type          voxel.BlockType
+	Count         int
+	Durability    int // Current remaining durability (0 = unused or non-tool)
+	MaxDurability int // Maximum durability (59 for wood, 131 for stone, 250 for iron, 1561 for diamond)
 }
 
 // Recipe represents a 2x2 or 3x3 crafting pattern
@@ -354,6 +356,301 @@ func init() {
 			},
 			Output: ItemStack{Type: voxel.BlockTNT, Count: 1},
 		},
+
+		// 22. Bow (3 Sticks + 3 Strings)
+		{
+			Width:  3,
+			Height: 3,
+			Pattern: []voxel.BlockType{
+				voxel.BlockAir, voxel.ItemStick, voxel.ItemString,
+				voxel.ItemStick, voxel.BlockAir, voxel.ItemString,
+				voxel.BlockAir, voxel.ItemStick, voxel.ItemString,
+			},
+			Output: ItemStack{Type: voxel.ItemBow, Count: 1},
+		},
+
+		// 23. Shield (1 Iron Ingot + 6 Planks)
+		{
+			Width:  3,
+			Height: 3,
+			Pattern: []voxel.BlockType{
+				voxel.BlockOakPlanks, voxel.ItemIronIngot, voxel.BlockOakPlanks,
+				voxel.BlockOakPlanks, voxel.BlockOakPlanks, voxel.BlockOakPlanks,
+				voxel.BlockAir, voxel.BlockOakPlanks, voxel.BlockAir,
+			},
+			Output: ItemStack{Type: voxel.ItemShield, Count: 1},
+		},
+
+		// 24. Flint and Steel (Iron Ingot + Flint)
+		{
+			Width:  2,
+			Height: 2,
+			Pattern: []voxel.BlockType{
+				voxel.ItemIronIngot, voxel.BlockAir,
+				voxel.BlockAir, voxel.ItemFlint,
+			},
+			Output: ItemStack{Type: voxel.ItemFlintAndSteel, Count: 1},
+		},
+
+		// 25. Shears (2 Iron Ingots)
+		{
+			Width:  2,
+			Height: 2,
+			Pattern: []voxel.BlockType{
+				voxel.BlockAir, voxel.ItemIronIngot,
+				voxel.ItemIronIngot, voxel.BlockAir,
+			},
+			Output: ItemStack{Type: voxel.ItemShears, Count: 1},
+		},
+
+		// 26. Fishing Rod (3 Sticks + 2 Strings)
+		{
+			Width:  3,
+			Height: 3,
+			Pattern: []voxel.BlockType{
+				voxel.BlockAir, voxel.BlockAir, voxel.ItemStick,
+				voxel.BlockAir, voxel.ItemStick, voxel.ItemString,
+				voxel.ItemStick, voxel.BlockAir, voxel.ItemString,
+			},
+			Output: ItemStack{Type: voxel.ItemFishingRod, Count: 1},
+		},
+
+		// 27. Compass (4 Iron + 1 Redstone)
+		{
+			Width:  3,
+			Height: 3,
+			Pattern: []voxel.BlockType{
+				voxel.BlockAir, voxel.ItemIronIngot, voxel.BlockAir,
+				voxel.ItemIronIngot, voxel.ItemRedstone, voxel.ItemIronIngot,
+				voxel.BlockAir, voxel.ItemIronIngot, voxel.BlockAir,
+			},
+			Output: ItemStack{Type: voxel.ItemCompass, Count: 1},
+		},
+
+		// 28. Clock (4 Gold + 1 Redstone)
+		{
+			Width:  3,
+			Height: 3,
+			Pattern: []voxel.BlockType{
+				voxel.BlockAir, voxel.ItemGoldIngot, voxel.BlockAir,
+				voxel.ItemGoldIngot, voxel.ItemRedstone, voxel.ItemGoldIngot,
+				voxel.BlockAir, voxel.ItemGoldIngot, voxel.BlockAir,
+			},
+			Output: ItemStack{Type: voxel.ItemClock, Count: 1},
+		},
+
+		// 29. Golden Tools
+		{
+			Width:  3,
+			Height: 3,
+			Pattern: []voxel.BlockType{
+				voxel.ItemGoldIngot, voxel.ItemGoldIngot, voxel.ItemGoldIngot,
+				voxel.BlockAir, voxel.ItemStick, voxel.BlockAir,
+				voxel.BlockAir, voxel.ItemStick, voxel.BlockAir,
+			},
+			Output: ItemStack{Type: voxel.ItemGoldenPickaxe, Count: 1},
+		},
+		{
+			Width:  2,
+			Height: 3,
+			Pattern: []voxel.BlockType{
+				voxel.ItemGoldIngot, voxel.ItemGoldIngot,
+				voxel.ItemGoldIngot, voxel.ItemStick,
+				voxel.BlockAir, voxel.ItemStick,
+			},
+			Output: ItemStack{Type: voxel.ItemGoldenAxe, Count: 1},
+		},
+		{
+			Width:  1,
+			Height: 3,
+			Pattern: []voxel.BlockType{
+				voxel.ItemGoldIngot,
+				voxel.ItemStick,
+				voxel.ItemStick,
+			},
+			Output: ItemStack{Type: voxel.ItemGoldenShovel, Count: 1},
+		},
+		{
+			Width:  1,
+			Height: 3,
+			Pattern: []voxel.BlockType{
+				voxel.ItemGoldIngot,
+				voxel.ItemGoldIngot,
+				voxel.ItemStick,
+			},
+			Output: ItemStack{Type: voxel.ItemGoldenSword, Count: 1},
+		},
+
+		// 30. Iron Armor
+		{
+			Width:  3,
+			Height: 2,
+			Pattern: []voxel.BlockType{
+				voxel.ItemIronIngot, voxel.ItemIronIngot, voxel.ItemIronIngot,
+				voxel.ItemIronIngot, voxel.BlockAir, voxel.ItemIronIngot,
+			},
+			Output: ItemStack{Type: voxel.ItemIronHelmet, Count: 1},
+		},
+		{
+			Width:  3,
+			Height: 3,
+			Pattern: []voxel.BlockType{
+				voxel.ItemIronIngot, voxel.BlockAir, voxel.ItemIronIngot,
+				voxel.ItemIronIngot, voxel.ItemIronIngot, voxel.ItemIronIngot,
+				voxel.ItemIronIngot, voxel.ItemIronIngot, voxel.ItemIronIngot,
+			},
+			Output: ItemStack{Type: voxel.ItemIronChestplate, Count: 1},
+		},
+		{
+			Width:  3,
+			Height: 3,
+			Pattern: []voxel.BlockType{
+				voxel.ItemIronIngot, voxel.ItemIronIngot, voxel.ItemIronIngot,
+				voxel.ItemIronIngot, voxel.BlockAir, voxel.ItemIronIngot,
+				voxel.ItemIronIngot, voxel.BlockAir, voxel.ItemIronIngot,
+			},
+			Output: ItemStack{Type: voxel.ItemIronLeggings, Count: 1},
+		},
+		{
+			Width:  3,
+			Height: 2,
+			Pattern: []voxel.BlockType{
+				voxel.ItemIronIngot, voxel.BlockAir, voxel.ItemIronIngot,
+				voxel.ItemIronIngot, voxel.BlockAir, voxel.ItemIronIngot,
+			},
+			Output: ItemStack{Type: voxel.ItemIronBoots, Count: 1},
+		},
+
+		// 31. Diamond Armor
+		{
+			Width:  3,
+			Height: 2,
+			Pattern: []voxel.BlockType{
+				voxel.ItemDiamond, voxel.ItemDiamond, voxel.ItemDiamond,
+				voxel.ItemDiamond, voxel.BlockAir, voxel.ItemDiamond,
+			},
+			Output: ItemStack{Type: voxel.ItemDiamondHelmet, Count: 1},
+		},
+		{
+			Width:  3,
+			Height: 3,
+			Pattern: []voxel.BlockType{
+				voxel.ItemDiamond, voxel.BlockAir, voxel.ItemDiamond,
+				voxel.ItemDiamond, voxel.ItemDiamond, voxel.ItemDiamond,
+				voxel.ItemDiamond, voxel.ItemDiamond, voxel.ItemDiamond,
+			},
+			Output: ItemStack{Type: voxel.ItemDiamondChestplate, Count: 1},
+		},
+		{
+			Width:  3,
+			Height: 3,
+			Pattern: []voxel.BlockType{
+				voxel.ItemDiamond, voxel.ItemDiamond, voxel.ItemDiamond,
+				voxel.ItemDiamond, voxel.BlockAir, voxel.ItemDiamond,
+				voxel.ItemDiamond, voxel.BlockAir, voxel.ItemDiamond,
+			},
+			Output: ItemStack{Type: voxel.ItemDiamondLeggings, Count: 1},
+		},
+		{
+			Width:  3,
+			Height: 2,
+			Pattern: []voxel.BlockType{
+				voxel.ItemDiamond, voxel.BlockAir, voxel.ItemDiamond,
+				voxel.ItemDiamond, voxel.BlockAir, voxel.ItemDiamond,
+			},
+			Output: ItemStack{Type: voxel.ItemDiamondBoots, Count: 1},
+		},
+
+		// 32. Golden Apple (Apple + 8 Gold Ingots)
+		{
+			Width:  3,
+			Height: 3,
+			Pattern: []voxel.BlockType{
+				voxel.ItemGoldIngot, voxel.ItemGoldIngot, voxel.ItemGoldIngot,
+				voxel.ItemGoldIngot, voxel.ItemApple, voxel.ItemGoldIngot,
+				voxel.ItemGoldIngot, voxel.ItemGoldIngot, voxel.ItemGoldIngot,
+			},
+			Output: ItemStack{Type: voxel.ItemGoldenApple, Count: 1},
+		},
+
+		// 33. Golden Carrot (Carrot + 8 Gold Nuggets)
+		{
+			Width:  3,
+			Height: 3,
+			Pattern: []voxel.BlockType{
+				voxel.ItemGoldNugget, voxel.ItemGoldNugget, voxel.ItemGoldNugget,
+				voxel.ItemGoldNugget, voxel.ItemCarrot, voxel.ItemGoldNugget,
+				voxel.ItemGoldNugget, voxel.ItemGoldNugget, voxel.ItemGoldNugget,
+			},
+			Output: ItemStack{Type: voxel.ItemGoldenCarrot, Count: 1},
+		},
+
+		// 34. Gold Ingot <-> 9 Nuggets
+		{
+			Width:   1,
+			Height:  1,
+			Pattern: []voxel.BlockType{voxel.ItemGoldIngot},
+			Output:  ItemStack{Type: voxel.ItemGoldNugget, Count: 9},
+		},
+		{
+			Width:  3,
+			Height: 3,
+			Pattern: []voxel.BlockType{
+				voxel.ItemGoldNugget, voxel.ItemGoldNugget, voxel.ItemGoldNugget,
+				voxel.ItemGoldNugget, voxel.ItemGoldNugget, voxel.ItemGoldNugget,
+				voxel.ItemGoldNugget, voxel.ItemGoldNugget, voxel.ItemGoldNugget,
+			},
+			Output: ItemStack{Type: voxel.ItemGoldIngot, Count: 1},
+		},
+
+		// 35. Iron Ingot <-> 9 Nuggets
+		{
+			Width:   1,
+			Height:  1,
+			Pattern: []voxel.BlockType{voxel.ItemIronIngot},
+			Output:  ItemStack{Type: voxel.ItemIronNugget, Count: 9},
+		},
+		{
+			Width:  3,
+			Height: 3,
+			Pattern: []voxel.BlockType{
+				voxel.ItemIronNugget, voxel.ItemIronNugget, voxel.ItemIronNugget,
+				voxel.ItemIronNugget, voxel.ItemIronNugget, voxel.ItemIronNugget,
+				voxel.ItemIronNugget, voxel.ItemIronNugget, voxel.ItemIronNugget,
+			},
+			Output: ItemStack{Type: voxel.ItemIronIngot, Count: 1},
+		},
+
+		// 36. Bread (3 Wheat)
+		{
+			Width:  3,
+			Height: 1,
+			Pattern: []voxel.BlockType{
+				voxel.ItemWheat, voxel.ItemWheat, voxel.ItemWheat,
+			},
+			Output: ItemStack{Type: voxel.ItemBread, Count: 1},
+		},
+
+		// 37. Cookie (2 Wheat + 1 Cocoa Bean/Brown Dye or Sugar Cane)
+		{
+			Width:  3,
+			Height: 1,
+			Pattern: []voxel.BlockType{
+				voxel.ItemWheat, voxel.BlockSugarCane, voxel.ItemWheat,
+			},
+			Output: ItemStack{Type: voxel.ItemCookie, Count: 8},
+		},
+
+		// 38. Book (1 Leather + 3 Sugar Cane)
+		{
+			Width:  2,
+			Height: 2,
+			Pattern: []voxel.BlockType{
+				voxel.BlockSugarCane, voxel.BlockSugarCane,
+				voxel.BlockSugarCane, voxel.ItemLeather,
+			},
+			Output: ItemStack{Type: voxel.ItemBook, Count: 1},
+		},
 	}
 }
 
@@ -420,7 +717,12 @@ func MatchCraftingGrid(grid []ItemStack, gridW, gridH int) (ItemStack, int) {
 		}
 
 		if match {
-			return r.Output, rIdx
+			out := r.Output
+			if bDef, ok := voxel.BlockRegistry[out.Type]; ok && bDef.IsTool && bDef.MaxDurability > 0 {
+				out.Durability = bDef.MaxDurability
+				out.MaxDurability = bDef.MaxDurability
+			}
+			return out, rIdx
 		}
 	}
 
